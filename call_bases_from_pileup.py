@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from cmath import nan
-from collections import ChainMap
 import pandas as pd
 import numpy as np
 import re
