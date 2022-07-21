@@ -136,14 +136,24 @@ def compare_bases(a,b):
         return -1 # we will ignore positions that are gaps in the MSA
     return a==b
 
-pp = [called_bases_posterior[p] for p in called_bases_posterior.index.tolist()]
-ll = [called_bases_likelihood[p] for p in called_bases_likelihood.index.tolist()]
-pp_ll_agreements = [a for a in [compare_bases(p,l) for p,l in zip(pp, ll)] if a > -1]
+all_pos = called_bases_posterior.index.tolist()
+pp = [called_bases_posterior[p] for p in all_pos]
+ll = [called_bases_likelihood[p] for p in all_pos]
+og = [og_reference[msa_og_j[pos]] for pos in all_pos]
 
-# how similar are they to the original called bases?
-og = [og_reference[msa_og_j[pos]] for pos in called_bases_posterior.index.tolist()]
-pp_og_agreements = [a for a in [compare_bases(p,o) for p,o in zip(pp, og)] if a > -1]
-ll_og_agreements = [a for a in [compare_bases(l,o) for l,o in zip(ll, og)] if a > -1]
+all_calls_df = pd.DataFrame(data = [all_pos, pp, ll, og])
+
+def get_agreements(list1, list2, pos_list):
+    ag_all = [(a,pos) for a,pos in [(compare_bases(l1,l2),pos) for l1,l2,pos in zip(list1, list2, pos_list)] if a > -1]
+    ag = [a for a,pos in ag_all]
+    no_reads_pos = [(not a) for a,pos in ag_all if (positions_df.loc[positions_df['pos'] == pos]['match_str'].values[0] == '*')]
+    # we are returning the following quantities: 
+    # %bases agreeing, total agreements, total bases compared, total disagreements at positions where no reads aligned, total disagreements
+    return [np.mean(ag), np.sum(ag), len(ag), sum(no_reads_pos), np.sum([(not a) for a in ag])]
+
+pp_ll_agreements = get_agreements(pp, ll, all_pos) # agreements between posterior and likelihood
+pp_og_agreements = get_agreements(pp, og, all_pos) # agreements between posterior and ground-truth
+ll_og_agreements = get_agreements(ll, og, all_pos) # agreements between likelihood and ground-truth because why not
 
 # output stats
 # agreement b/ posterior prob (pp) & likelihood-only (ll) calling
