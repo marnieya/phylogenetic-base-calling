@@ -19,7 +19,7 @@ bases_prior_df.columns = ['A','C','G','T']
 
 # read in quality scores / alignment info at all positions
 # positions are 1-indexed, don't have gaps
-pileup_path = home_dir + pileup_results_path + pileup_file
+pileup_path = pileup_results_path + pileup_file
 with open(home_dir + pileup_path) as f:
     positions_temp = f.readlines()
     f.close()
