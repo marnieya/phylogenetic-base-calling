@@ -158,9 +158,9 @@ ll_og_agreements = get_agreements(ll, og, all_pos) # agreements between likeliho
 
 # output stats
 # agreement b/ posterior prob (pp) & likelihood-only (ll) calling
-print(', '.join(pileup_prefix.split('_') + ['pp_ll_agreements'] + [str(i) for i in (np.mean(pp_ll_agreements), np.sum(pp_ll_agreements), len(pp_ll_agreements))]))
+print(', '.join(pileup_prefix.split('_') + ['pp_ll_agreements'] + [str(i) for i in pp_ll_agreements]))
 # agreement b/ consensus & phylo pp calling
-print(', '.join(pileup_prefix.split('_') + ['pp_og_agreements'] + [str(i) for i in (np.mean(pp_og_agreements), np.sum(pp_og_agreements), len(pp_og_agreements))]))
+print(', '.join(pileup_prefix.split('_') + ['pp_og_agreements'] + [str(i) for i in pp_og_agreements]))
 # agreement b/ consensus & ll calling
-print(', '.join(pileup_prefix.split('_') + ['ll_og_agreements'] + [str(i) for i in (np.mean(ll_og_agreements), np.sum(ll_og_agreements), len(ll_og_agreements))]))
+print(', '.join(pileup_prefix.split('_') + ['ll_og_agreements'] + [str(i) for i in ll_og_agreements]))
 
