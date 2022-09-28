@@ -2,11 +2,13 @@
 
 import pandas as pd
 import numpy as np
+import seaborn as sea
 import re
 import sys
 
 pileup_file = sys.argv[1] # pileup file
 pileup_results_path = sys.argv[2] # folder containing pileup file
+
 pileup_prefix = re.sub('_piledup.txt','',pileup_file)
 
 ### ============ get prior probabilities ============
@@ -20,6 +22,7 @@ bases_prior_df.columns = ['A','C','G','T']
 # read in quality scores / alignment info at all positions
 # positions are 1-indexed, don't have gaps
 pileup_path = pileup_results_path + pileup_file
+
 with open(home_dir + pileup_path) as f:
     positions_temp = f.readlines()
     f.close()
@@ -43,24 +46,20 @@ positions_dict = {int(p[0]):(p[1], p[5], [phred_e_dict[phred] for phred in list(
 positions_idx = sorted(list(positions_dict.keys())) # bases with reads, in order
 
 # read in the gapped MSA
-with open(home_dir + 'alignment101_mafft/msa_ref.fasta') as f: 
+with open(home_dir + 'alignment101/msa_ref.fasta') as f: 
     reference = f.readlines()
     f.close()
 reference = reference[1].strip('\n')
 
-with open(home_dir + 'alignment101_mafft/msa_og.fasta') as f: 
+with open(home_dir + 'alignment101/msa_og.fasta') as f: 
     og_reference = f.readlines()
     f.close()
 og_reference = og_reference[1].strip('\n')
 
 # 'pos' refers to the "absolute" position on the Wuhan-Hu reference genome where the read aligned
-# 'i' refers to position on the MSA where the ground-truth OU genome does not have a gap (i.e. content of array is MSA pos, index is absolute pos)
 # 'j' refers to position on the MSA where the Wuhan-Hu reference genome does not have a gap (i.e. content of array is MSA pos, index is absolute pos)
-
 # all are 0-indexed at this point in the program
-msa_og_i = [i for i,ref_base in enumerate(og_reference) if ref_base!='-']
 msa_og_j = [j for j,ref_base in enumerate(reference) if ref_base!='-']
-
 
 ### ============ calculate posteriors ============
 
@@ -138,11 +137,17 @@ def compare_bases(a,b):
     return a==b
 
 all_pos = called_bases_posterior.index.tolist()
+pr = [bases_prior_df.loc[[msa_og_j[p]]].idxmax(axis=1).values[0] for p in all_pos]
 pp = [called_bases_posterior[p] for p in all_pos]
 ll = [called_bases_likelihood[p] for p in all_pos]
 og = [og_reference[msa_og_j[pos]] for pos in all_pos]
 
-all_calls_df = pd.DataFrame(data = [all_pos, pp, ll, og])
+def get_all_comparisons(list1, list2):
+    return([compare_bases(l1,l2) for l1,l2 in zip(list1, list2)])
+
+pr_og_all_comp = get_all_comparisons(pr, og)
+ll_og_all_comp = get_all_comparisons(pp, og)
+pp_og_all_comp = get_all_comparisons(ll, og)
 
 def get_agreements(list1, list2, pos_list):
     ag_all = [(a,pos) for a,pos in [(compare_bases(l1,l2),pos) for l1,l2,pos in zip(list1, list2, pos_list)] if a > -1]
@@ -152,15 +157,15 @@ def get_agreements(list1, list2, pos_list):
     # %bases agreeing, total agreements, total bases compared, total disagreements at positions where no reads aligned, total disagreements
     return [np.mean(ag), np.sum(ag), len(ag), sum(no_reads_pos), np.sum([(not a) for a in ag])]
 
-pp_ll_agreements = get_agreements(pp, ll, all_pos) # agreements between posterior and likelihood
+pr_og_agreements = get_agreements(pr, og, all_pos) # agreements between posterior and likelihood
 pp_og_agreements = get_agreements(pp, og, all_pos) # agreements between posterior and ground-truth
 ll_og_agreements = get_agreements(ll, og, all_pos) # agreements between likelihood and ground-truth because why not
 
 # output stats
 # agreement b/ posterior prob (pp) & likelihood-only (ll) calling
-print(', '.join(pileup_prefix.split('_') + ['pp_ll_agreements'] + [str(i) for i in pp_ll_agreements]))
+print(', '.join(pileup_prefix.split('_') + ['prior_accuracy'] + [str(i) for i in pr_og_agreements]))
 # agreement b/ consensus & phylo pp calling
-print(', '.join(pileup_prefix.split('_') + ['pp_og_agreements'] + [str(i) for i in pp_og_agreements]))
+print(', '.join(pileup_prefix.split('_') + ['posterior_accuracy'] + [str(i) for i in pp_og_agreements]))
 # agreement b/ consensus & ll calling
-print(', '.join(pileup_prefix.split('_') + ['ll_og_agreements'] + [str(i) for i in ll_og_agreements]))
+print(', '.join(pileup_prefix.split('_') + ['likelihood_accuracy'] + [str(i) for i in ll_og_agreements]))
 
