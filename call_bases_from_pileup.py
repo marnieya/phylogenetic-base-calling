@@ -14,13 +14,14 @@ pileup_prefix = re.sub('_piledup.txt','',pileup_file)
 ### ============ get prior probabilities ============
 
 home_dir = '/Users/marniella/research/rotations/r3_nielsen/'
-bases_prior_df = pd.read_csv(home_dir + 'OU061397_1_PP.txt', sep = '\t', index_col='position')
+bases_prior_df = pd.read_csv(home_dir + 'alignment101_mafft2/OU061397_1_PP_new.txt', sep = '\t', index_col='position')
 bases_prior_df.columns = ['A','C','G','T']
 
 ### ============ get likelihood from raw reads ============
 
 # read in quality scores / alignment info at all positions
 # positions are 1-indexed, don't have gaps
+
 pileup_path = pileup_results_path + pileup_file
 
 with open(home_dir + pileup_path) as f:
@@ -46,12 +47,12 @@ positions_dict = {int(p[0]):(p[1], p[5], [phred_e_dict[phred] for phred in list(
 positions_idx = sorted(list(positions_dict.keys())) # bases with reads, in order
 
 # read in the gapped MSA
-with open(home_dir + 'alignment101/msa_ref.fasta') as f: 
+with open(home_dir + 'alignment101_mafft2/msa_ref.fasta') as f: 
     reference = f.readlines()
     f.close()
 reference = reference[1].strip('\n')
 
-with open(home_dir + 'alignment101/msa_og.fasta') as f: 
+with open(home_dir + 'alignment101_mafft2/msa_og.fasta') as f: 
     og_reference = f.readlines()
     f.close()
 og_reference = og_reference[1].strip('\n')
