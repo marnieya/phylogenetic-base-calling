@@ -4,16 +4,26 @@ import pandas as pd
 import numpy as np
 import re
 import sys
+import subprocess
+import datetime
 
 pileup_file = sys.argv[1] # pileup file
-pileup_results_path = sys.argv[2] # folder containing pileup file
+pileup_results_path = sys.argv[2] # path to folder containing pileup file
+pruned_bool = sys.argv[3] # 't' or 'f' if using the posterior probs from pruned tree
 
-pileup_prefix = re.sub('_piledup.txt','',pileup_file)
+# # for troubleshooting output
+# dt = datetime.datetime.now()
+# output_dir = pileup_results_path + 'phylobcrun_' + 'pruned' + pruned_bool  + '_' + dt.strftime("%d%m%y") + "/"
+# subprocess.run('mkdir ' + output_dir, shell=True)
 
 ### ============ get prior probabilities ============
 
-home_dir = '/Users/marniella/research/rotations/r3_nielsen/'
-bases_prior_df = pd.read_csv(home_dir + 'alignment101_mafft2/OU061397_1_PP_new.txt', sep = '\t', index_col='position')
+home_dir = '/Users/marniella/research/nielsen_lab/phylogenetic-base-calling/'
+msa_dir = 'ou_not_pruned/'
+if pruned_bool:
+    msa_dir = 'ou_pruned/'
+
+bases_prior_df = pd.read_csv(home_dir + msa_dir + 'OU_PP_indexed.txt', sep = '\t', index_col='position')
 bases_prior_df.columns = ['A','C','G','T']
 
 ### ============ get likelihood from raw reads ============
@@ -23,7 +33,7 @@ bases_prior_df.columns = ['A','C','G','T']
 
 pileup_path = pileup_results_path + pileup_file
 
-with open(home_dir + pileup_path) as f:
+with open(pileup_path) as f:
     positions_temp = f.readlines()
     f.close()
 positions_temp = [str.split(p.strip('\n'), '\t')[1:6] for p in positions_temp]
@@ -46,12 +56,12 @@ positions_dict = {int(p[0]):(p[1], p[5], [phred_e_dict[phred] for phred in list(
 positions_idx = sorted(list(positions_dict.keys())) # bases with reads, in order
 
 # read in the gapped MSA
-with open(home_dir + 'alignment101_mafft2/msa_ref.fasta') as f: 
+with open(home_dir + 'justmn.fasta') as f: 
     reference = f.readlines()
     f.close()
 reference = reference[1].strip('\n')
 
-with open(home_dir + 'alignment101_mafft2/msa_og.fasta') as f: 
+with open(home_dir + 'justou.fasta') as f: 
     og_reference = f.readlines()
     f.close()
 og_reference = og_reference[1].strip('\n')
@@ -155,17 +165,14 @@ def get_agreements(list1, list2, pos_list):
     no_reads_pos = [(not a) for a,pos in ag_all if (positions_df.loc[positions_df['pos'] == pos]['match_str'].values[0] == '*')]
     # we are returning the following quantities: 
     # %bases agreeing, total agreements, total bases compared, total disagreements at positions where no reads aligned, total disagreements
-    return [np.mean(ag), np.sum(ag), len(ag), sum(no_reads_pos), np.sum([(not a) for a in ag])]
+    metrics = [np.mean(ag), np.sum(ag), len(ag), sum(no_reads_pos), np.sum([(not a) for a in ag])]
+    return [str(m) for m in metrics]
 
 pr_og_agreements = get_agreements(pr, og, all_pos) # agreements between posterior and likelihood
 pp_og_agreements = get_agreements(pp, og, all_pos) # agreements between posterior and ground-truth
 ll_og_agreements = get_agreements(ll, og, all_pos) # agreements between likelihood and ground-truth because why not
 
-# output stats
-# agreement b/ posterior prob (pp) & likelihood-only (ll) calling
-print(', '.join(pileup_prefix.split('_') + ['prior_accuracy'] + [str(i) for i in pr_og_agreements]))
-# agreement b/ consensus & phylo pp calling
-print(', '.join(pileup_prefix.split('_') + ['posterior_accuracy'] + [str(i) for i in pp_og_agreements]))
-# agreement b/ consensus & ll calling
-print(', '.join(pileup_prefix.split('_') + ['likelihood_accuracy'] + [str(i) for i in ll_og_agreements]))
+# output agreement stats 'pr_og','pp_og','ll_og'
+print(','.join([pileup_file, pr_og_agreements[0], pp_og_agreements[0], ll_og_agreements[0]]))
+
 
