@@ -1,2 +1,0 @@
-@SQ	SN:MN908947.3	LN:29903
-@PG	ID:minimap2	PN:minimap2	VN:2.24-r1122	CL:minimap2 -t 8 -a -x sr -o 0.9x_reads_50bp_e0.005_is50_sim.sam SARS_CoV_2_Wuhan_ref_genome.fasta 0.9x_reads_50bp_e0.005_is50.simulated_50_read1.fq 0.9x_reads_50bp_e0.005_is50.simulated_50_read2.fq
