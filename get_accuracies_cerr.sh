@@ -1,0 +1,8 @@
+#!/bin/bash
+./call_bases_from_pileup.py 10x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_10x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 1x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_1x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 20x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_20x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 2x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_2x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 3x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_3x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 4x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_4x_reads_50bp_e0.005_is50/ & 
+./call_bases_from_pileup.py 5x_reads_50bp_e0.005_is50_sim_piledup.txt /Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/sim_results_verr_compare/sim_results_5x_reads_50bp_e0.005_is50/

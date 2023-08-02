@@ -81,7 +81,6 @@ with open(bases_prior_path) as f:
         bases_prior_dict[int(msa_pos)] = np.array([prior_A,prior_C,prior_G,prior_T,0],dtype='float64')
 
 pileup_dict = {}
-debug_dict = {}
 pileup_path = pileup_results_path + pileup_file
 
 with open(pileup_path) as f:
@@ -92,9 +91,6 @@ with open(pileup_path) as f:
         pr_list = bases_prior_dict[msa_og_j[pos]]
         q_list = np.array([get_q(ref_base, m, pow(10, -(ord(p) - 33) / 10.0)) for m, p in zip(match_str, phred_list)])
         ll_list = np.prod(q_list, axis=0)
-        debug_dict[pos] = (n_reads, match_str, phred_list, q_list)
-        if(len(ll_list) == 4):
-            print(pos)
         pp_list = np.array([0.0]*len(ll_list))
         if (0 in ll_list[:4]): # we might have underflow in likelihood of reads
             log_pr_list = np.log10(pr_list)
