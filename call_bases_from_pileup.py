@@ -9,20 +9,20 @@ pileup_results_path = sys.argv[2]
 
 # og
 # pileup_file = "10x_reads_50bp_verr_is50_sim_piledup.txt"
-# pileup_results_path = "step3_phylobc/sim_results_verr/sim_results_10x_reads_50bp_verr_is50/"
+# pileup_results_path = "project-extra-files/phylobc/step3_phylobc/sim_results_verr/sim_results_10x_reads_50bp_verr_is50/"
 
-# # sra
+# sra
 # pileup_file = "SRR25117579_piledup.txt"
-# pileup_results_path = "step3_phylobc/raw_read_results/"
+# pileup_results_path = "/Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/raw_read_results/"
 
-home_dir = '/Users/marniella/research/nielsen_lab/phylogenetic-base-calling/'
-msa_dir = 'ou_pruned/'
+home_dir = '/Users/marniella/research/nielsen_lab/'
+msa_dir = 'phylogenetic-base-calling/ou_pruned/'
 
-with open(home_dir + 'justmn.fasta') as f: 
+with open(home_dir + 'phylogenetic-base-calling/justmn.fasta') as f: 
     reference = f.readlines()
 reference = reference[1].strip('\n')
 
-with open(home_dir + 'justou.fasta') as f: 
+with open(home_dir + 'phylogenetic-base-calling/justou.fasta') as f: 
     og_reference = f.readlines()
 og_reference = og_reference[1].strip('\n')
 
@@ -71,7 +71,6 @@ def get_q(ref, m, e):
         return get_other_match(m.upper(),e)
     return [np.nan]*5 
 
-# TODO: review how i'm doing the logs and the underflow -- can't have a 0 then call prob=1 after exponent
 bases_prior_dict = {}
 bases_prior_path = home_dir + msa_dir + 'OU_PP_indexed.txt'
 with open(bases_prior_path) as f:
@@ -92,10 +91,14 @@ with open(pileup_path) as f:
         q_list = np.array([get_q(ref_base, m, pow(10, -(ord(p) - 33) / 10.0)) for m, p in zip(match_str, phred_list)])
         ll_list = np.prod(q_list, axis=0)
         pp_list = np.array([0.0]*len(ll_list))
-        if (0 in ll_list[:4]): # we might have underflow in likelihood of reads
-            log_pr_list = np.log10(pr_list)
-            log_ll_list = np.nansum([np.append(np.log10(q[:4]), q[4]) for q in q_list], axis = 0) # get log likelihoods
-            log_pp_list = np.add(log_pr_list, log_ll_list) # get log posteriors
+        if (0 in ll_list[:4]) : # we might have underflow in likelihood of reads; careful with log of 0
+            log_pr_list = np.append(np.log10(pr_list[:4]),0) # get log priors
+            log_ll_list = np.nansum( # get log likelihoods
+                [ np.log10(np.append(q[:4], np.min(q[:4]) / 10.0)) if (np.sum(q) < 5) else np.array([0]*5) for q in q_list ], axis = 0) 
+            if (np.sum(log_ll_list) == 0.0) and (og_reference[msa_og_j[pos]] == '-'): 
+                log_pp_list = np.array([-1]*4 + [0])
+            else:
+                log_pp_list = np.add(log_pr_list, log_ll_list) # get log posteriors
             ll_list = [np.power(10, ll - np.max(log_ll_list)) for ll in log_ll_list] # normalize log likelihoods, exponent
             pp_list = [np.power(10, pp - np.max(log_pp_list)) for pp in log_pp_list] # normalize log posteriors, exponent
         else: # can resume normal calculations
@@ -140,3 +143,12 @@ pr_og_agreements = get_agreements(pr, og, positions_idx)
 pp_og_agreements = get_agreements(pp, og, positions_idx) 
 ll_og_agreements = get_agreements(ll, og, positions_idx) 
 print(','.join([pileup_file, pr_og_agreements[0], pp_og_agreements[0], ll_og_agreements[0]]))
+
+# prefix = re.sub('_piledup.txt','', pileup_file)
+# with open(pileup_results_path + prefix + '_calls.fasta', 'a') as f:
+#     f.write('>' + prefix + '_postprob_calls\n')
+#     f.write(''.join(pp) + '\n')
+#     f.write('>' + prefix + '_priorprob_calls\n')
+#     f.write(''.join(pr) + '\n')
+#     f.write('>' + prefix + '_likelihood_calls\n')
+#     f.write(''.join(ll) + '\n')

@@ -1,8 +1,4 @@
-/Users/marniella/research/nielsen_lab/phylogenetic-base-calling/./call_bases_from_pileup.py:98: RuntimeWarning: divide by zero encountered in log10
-  log_pr_list = np.log10(pr_list)
-/Users/marniella/research/nielsen_lab/phylogenetic-base-calling/./call_bases_from_pileup.py:98: RuntimeWarning: divide by zero encountered in log10
-  log_pr_list = np.log10(pr_list)
 
-real	0m6.110s
-user	0m23.351s
-sys	0m0.589s
+real	0m6.179s
+user	0m23.553s
+sys	0m0.559s
