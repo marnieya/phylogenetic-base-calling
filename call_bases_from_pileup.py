@@ -126,29 +126,29 @@ pp = called_bases_posterior
 ll = called_bases_likelihood
 og = [og_reference[msa_og_j[pos]] for pos in positions_idx]
 
-def get_all_comparisons(list1, list2):
-    return([compare_bases(l1,l2) for l1,l2 in zip(list1, list2)])
+# def get_all_comparisons(list1, list2):
+#     return([compare_bases(l1,l2) for l1,l2 in zip(list1, list2)])
 
-pr_og_all_comp = get_all_comparisons(pr, og)
-ll_og_all_comp = get_all_comparisons(pp, og)
-pp_og_all_comp = get_all_comparisons(ll, og)
+# pr_og_all_comp = get_all_comparisons(pr, og)
+# ll_og_all_comp = get_all_comparisons(pp, og)
+# pp_og_all_comp = get_all_comparisons(ll, og)
 
-def get_agreements(list1, list2, pos_list):
-    ag_all = [(compare_bases(l1, l2), pos) for l1, l2, pos in zip(list1, list2, pos_list) if compare_bases(l1, l2) > -1]
-    ag = [a for a, pos in ag_all]
-    metrics = [np.mean(ag), np.sum(ag), len(ag), np.sum([not a for a in ag])]
-    return [str(m) for m in metrics]
+# def get_agreements(list1, list2, pos_list):
+#     ag_all = [(compare_bases(l1, l2), pos) for l1, l2, pos in zip(list1, list2, pos_list) if compare_bases(l1, l2) > -1]
+#     ag = [a for a, pos in ag_all]
+#     metrics = [np.mean(ag), np.sum(ag), len(ag), np.sum([not a for a in ag])]
+#     return [str(m) for m in metrics]
 
-pr_og_agreements = get_agreements(pr, og, positions_idx) 
-pp_og_agreements = get_agreements(pp, og, positions_idx) 
-ll_og_agreements = get_agreements(ll, og, positions_idx) 
-print(','.join([pileup_file, pr_og_agreements[0], pp_og_agreements[0], ll_og_agreements[0]]))
+# pr_og_agreements = get_agreements(pr, og, positions_idx) 
+# pp_og_agreements = get_agreements(pp, og, positions_idx) 
+# ll_og_agreements = get_agreements(ll, og, positions_idx) 
+# print(','.join([pileup_file, pr_og_agreements[0], pp_og_agreements[0], ll_og_agreements[0]]))
 
-# prefix = re.sub('_piledup.txt','', pileup_file)
-# with open(pileup_results_path + prefix + '_calls.fasta', 'a') as f:
-#     f.write('>' + prefix + '_postprob_calls\n')
-#     f.write(''.join(pp) + '\n')
-#     f.write('>' + prefix + '_priorprob_calls\n')
-#     f.write(''.join(pr) + '\n')
-#     f.write('>' + prefix + '_likelihood_calls\n')
-#     f.write(''.join(ll) + '\n')
+prefix = re.sub('_sub[0-9]+_piledup.txt','', pileup_file)
+with open(pileup_results_path + prefix + '_calls.fasta', 'a') as f:
+    f.write('>' + prefix + '_postprob_calls\n')
+    f.write(''.join(pp) + '\n')
+    f.write('>' + prefix + '_priorprob_calls\n')
+    f.write(''.join(pr) + '\n')
+    f.write('>' + prefix + '_likelihood_calls\n')
+    f.write(''.join(ll) + '\n')
