@@ -111,13 +111,6 @@ with open(pileup_path) as f:
 
 positions_idx = sorted(list(pileup_dict.keys()))
 
-def compare_bases(a,b):
-    if a=='N' or b=='N':
-        return -1
-    if (b=='-' and a !='-') or (b!='-' and a =='-'): 
-        return -1 
-    return a==b
-
 called_bases_posterior = [header[np.nanargmax(p)] for p in [np.divide(pileup_dict[p][2],sum(pileup_dict[p][2])) for p in positions_idx]]
 called_bases_likelihood = [header[np.nanargmax(p)] for p in [np.divide(pileup_dict[p][1],sum(pileup_dict[p][1])) for p in positions_idx]]
 
@@ -125,24 +118,6 @@ pr = [header[np.nanargmax(pileup_dict[p][0])] for p in positions_idx]
 pp = called_bases_posterior
 ll = called_bases_likelihood
 og = [og_reference[msa_og_j[pos]] for pos in positions_idx]
-
-# def get_all_comparisons(list1, list2):
-#     return([compare_bases(l1,l2) for l1,l2 in zip(list1, list2)])
-
-# pr_og_all_comp = get_all_comparisons(pr, og)
-# ll_og_all_comp = get_all_comparisons(pp, og)
-# pp_og_all_comp = get_all_comparisons(ll, og)
-
-# def get_agreements(list1, list2, pos_list):
-#     ag_all = [(compare_bases(l1, l2), pos) for l1, l2, pos in zip(list1, list2, pos_list) if compare_bases(l1, l2) > -1]
-#     ag = [a for a, pos in ag_all]
-#     metrics = [np.mean(ag), np.sum(ag), len(ag), np.sum([not a for a in ag])]
-#     return [str(m) for m in metrics]
-
-# pr_og_agreements = get_agreements(pr, og, positions_idx) 
-# pp_og_agreements = get_agreements(pp, og, positions_idx) 
-# ll_og_agreements = get_agreements(ll, og, positions_idx) 
-# print(','.join([pileup_file, pr_og_agreements[0], pp_og_agreements[0], ll_og_agreements[0]]))
 
 prefix = re.sub('_sub[0-9]+_piledup.txt','', pileup_file)
 with open(pileup_results_path + prefix + '_calls.fasta', 'a') as f:
