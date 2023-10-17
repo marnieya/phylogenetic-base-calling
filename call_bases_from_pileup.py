@@ -6,23 +6,19 @@ import sys
 
 pileup_file = sys.argv[1] 
 pileup_results_path = sys.argv[2] 
-
-# og
-# pileup_file = "10x_reads_50bp_verr_is50_sim_piledup.txt"
-# pileup_results_path = "project-extra-files/phylobc/step3_phylobc/sim_results_verr/sim_results_10x_reads_50bp_verr_is50/"
+prefix = re.sub('_piledup.txt','', pileup_file)
 
 # sra
 # pileup_file = "SRR25117579_piledup.txt"
-# pileup_results_path = "/Users/marniella/research/nielsen_lab/project-extra-files/phylobc/step3_phylobc/raw_read_results/"
+# pileup_results_path = "/Users/marniella/research/nielsen_lab/project-extra-files/phylobc/raw_read_results/"
 
 home_dir = '/Users/marniella/research/nielsen_lab/'
-msa_dir = 'phylogenetic-base-calling/ou_pruned/'
 
-with open(home_dir + 'phylogenetic-base-calling/justmn.fasta') as f: 
+with open(home_dir + 'Wuhan_Hu_reference_MSA.fasta') as f: 
     reference = f.readlines()
 reference = reference[1].strip('\n')
 
-with open(home_dir + 'phylogenetic-base-calling/justou.fasta') as f: 
+with open(pileup_results_path + prefix + '_aligned.fasta') as f: 
     og_reference = f.readlines()
 og_reference = og_reference[1].strip('\n')
 
@@ -35,28 +31,28 @@ pattern3 = re.compile('\\$')
 pattern4 = re.compile('\\^.{1}')
 
 def get_other_match(m,e):
-    # probs          A     C    G    T  -
+    # probs             A       C       G       T       -
     match m:
-        case 'R': #  X          X
-            return [1-e, e/2, 1-e, e/2, 0]
-        case 'Y': #        X        X
-            return [e/2, 1-e, e/2, 1-e, 0]
-        case 'S': #        X    X
-            return [e/2, 1-e, 1-e, e/2, 0]
-        case 'W': #  X              X
-            return [1-e, e/2, e/2, 1-e, 0]
-        case 'K': #             X   X
-            return [e/2, e/2, 1-e, 1-e, 0]
-        case 'M': # X      X 
-            return [1-e, 1-e, e/2, e/2, 0]
-        case 'B': #        X    X   X
-            return [e/2, 1-e, 1-e, 1-e, 0]
-        case 'D': # X           X   X
-            return [1-e, e/2, 1-e, 1-e, 0]
-        case 'H': # X      X        X
-            return [1-e, 1-e, e/2, 1-e, 0]
-        case 'V': # X      X    X
-            return [1-e, 1-e, 1-e, e/2, 0]
+        case 'R': #     X               X
+            return [(1-e)/2, e/2    , (1-e)/2, e/2    ,  0]
+        case 'Y': #             X               X
+            return [e/2    , (1-e)/2, e/2    , (1-e)/2,  0]
+        case 'S': #             X       X   
+            return [e/2    , (1-e)/2, (1-e)/2, e/2    ,  0]
+        case 'W': #     X                       X
+            return [(1-e)/2, e/2    , e/2    , (1-e)/2,  0]
+        case 'K': #                     X       X
+            return [e/2    , e/2    , (1-e)/2, (1-e)/2,  0]
+        case 'M': #     X       X 
+            return [(1-e)/2, (1-e)/2, e/2    , e/2    ,  0]
+        case 'B': #             X       X       X
+            return [e      , (1-e)/3, (1-e)/3, (1-e)/3,  0]
+        case 'D': #     X               X       X
+            return [(1-e)/3, e      , (1-e)/3, (1-e)/3,  0]
+        case 'H': #     X       X               X
+            return [(1-e)/3, (1-e)/3, e      , (1-e)/3,  0]
+        case 'V': #     X       X       X
+            return [(1-e)/3, (1-e)/3, (1-e)/3, e      ,  0]
 
 def get_q(ref, m, e):
     qualities = [e/3]*4 + [0]     
@@ -117,9 +113,7 @@ called_bases_likelihood = [header[np.nanargmax(p)] for p in [np.divide(pileup_di
 pr = [header[np.nanargmax(pileup_dict[p][0])] for p in positions_idx]
 pp = called_bases_posterior
 ll = called_bases_likelihood
-og = [og_reference[msa_og_j[pos]] for pos in positions_idx]
 
-prefix = re.sub('_sub[0-9]+_piledup.txt','', pileup_file)
 with open(pileup_results_path + prefix + '_calls.fasta', 'a') as f:
     f.write('>' + prefix + '_postprob_calls\n')
     f.write(''.join(pp) + '\n')
