@@ -12,7 +12,7 @@ pileup_file = "SRR26069395_sub5_piledup.txt"
 pileup_results_path = "/Users/marniella/research/nielsen_lab/project-extra-files/phylobc/testing/SRR26069395_files/"
 
 prefix = re.sub('_piledup.txt','', pileup_file)
-id = re.sub('_sub.*','', prefix)
+prefix_base = re.sub('_sub.*','', prefix)
 
 home_dir = '/Users/marniella/research/nielsen_lab/'
 
@@ -28,16 +28,16 @@ with open(pileup_results_path + prefix + '_sa.fasta') as f:
     subsample_assembly = f.readlines()
 subsample_assembly = subsample_assembly[1].strip('\n')
 
-with open(pileup_results_path + id + '_gt.fasta') as f: 
+with open(pileup_results_path + prefix_base + '_gt.fasta') as f: 
     full_assembly = f.readlines()
 full_assembly = full_assembly[1].strip('\n')
 
 # create an array with length equal to the Wuhan-Hu reference, so that we know where the reference base ended up in the MSA
-# e.g. msa_idx_ref[30] looks up the 30th position in the "unaltered" Wuhan-Hu reference, and gives us its index in the global database MSA
+# e.g. msa_idx_ref[29] looks up the 30th position in the "unaltered" Wuhan-Hu reference, and gives us its index in the global database MSA
 msa_idx_ref = [where_in_ref for where_in_ref,msa_ref_base in enumerate(global_msa_reference) if msa_ref_base!='-']
 
 # create an array similar to the above, except that:
-# e.g. assembly_msa_idx_ref[30] looks up the 30th position, but gives us its index in the MSA with the assembled genome(s)
+# e.g. assembly_msa_idx_ref[29] looks up the 30th position, but gives us its index in the MSA with the assembled genome(s)
 assembly_msa_idx_ref = [where_in_assembly for where_in_assembly,assembly_msa_ref_base in enumerate(assembly_msa_reference) if assembly_msa_ref_base!='-']
 
 header = ['A','C','G','T','-']
@@ -109,18 +109,18 @@ with open(pileup_path) as f:
             log_pr_list = np.append(np.log10(pr_list[:4]),0) # get log priors
             log_ll_list = np.nansum( # get log likelihoods
                 [ np.log10(np.append(q[:4], np.min(q[:4]) / 10.0)) if (np.sum(q) < 5) else np.array([0]*5) for q in q_list ], axis = 0) 
-            if (np.sum(log_ll_list) == 0.0) and (subsample_assembly[assembly_msa_idx_ref[pos]] == '-'): 
+            if (np.sum(log_ll_list) == 0.0) and (subsample_assembly[assembly_msa_idx_ref[pos-1]] == '-'): 
                 log_pp_list = np.array([-1]*4 + [0]) # we do not make a call if there is a gap in the assembly
             else:
                 log_pp_list = np.add(log_pr_list, log_ll_list) # get log posteriors if no gap
             ll_list = [np.power(10, ll - np.max(log_ll_list)) for ll in log_ll_list] # normalize log likelihoods, exponent
             pp_list = [np.power(10, pp - np.max(log_pp_list)) for pp in log_pp_list] # normalize log posteriors, exponent
         else: # normal calculations
-            if (np.sum(ll_list) == 5.0) and (subsample_assembly[assembly_msa_idx_ref[pos]] == '-'): 
+            if (np.sum(ll_list) == 5.0) and (subsample_assembly[assembly_msa_idx_ref[pos-1]] == '-'): 
                 pp_list = np.array([0]*4 + [1]) # we do not make a call if there is a gap in the assembly
                 ll_list = [0]*4 + [1]
             else: 
-                pp_list = np.multiply(pr_list, ll_list) # get log posteriors if no gap
+                pp_list = np.multiply(pr_list, ll_list) # get posteriors if no gap
         pileup_dict[pos] = (pr_list, ll_list, pp_list, match_str, ref_base) 
 
 positions_idx = sorted(list(pileup_dict.keys()))
@@ -132,19 +132,26 @@ pr = [header[np.nanargmax(pileup_dict[p][0])] for p in positions_idx]
 pp = called_bases_posterior
 ll = called_bases_likelihood
 
-sa = [subsample_assembly[assembly_msa_idx_ref[p]] for p in positions_idx]
-gt = [full_assembly[assembly_msa_idx_ref[p]] for p in positions_idx]
+sa = [subsample_assembly[assembly_msa_idx_ref[p-1]] for p in positions_idx]
+gt = [full_assembly[assembly_msa_idx_ref[p-1]] for p in positions_idx]
 
 with open(pileup_results_path + prefix + '_calls_compare.fasta', 'a') as f:
     # ground truth only for testing accuracy of this method
-    f.write('>' + id + '\n')
+    f.write('>' + prefix_base + '\n')
     f.write(''.join(gt) + '\n')
-    # original assembly and probabilistic base calls
+    # original assembly 
     f.write('>' + prefix + '\n')
     f.write(''.join(sa) + '\n')
+    # probabilistic base calls
     f.write('>' + prefix + '_postprob_calls\n')
     f.write(''.join(pp) + '\n')
     f.write('>' + prefix + '_priorprob_calls\n')
     f.write(''.join(pr) + '\n')
     f.write('>' + prefix + '_likelihood_calls\n')
     f.write(''.join(ll) + '\n')
+
+# same as above but transposed and with position listed; appends to file for entire id
+with open(pileup_results_path + prefix_base + '_calls_by_pos.txt', 'a') as f:
+    for (pos,g,s,r,l,p) in zip(positions_idx, gt, sa, pr, ll, pp):
+        if g != 'N':
+            f.write(','.join([prefix, str(pos), g, s, r, l, p]) + '\n')
