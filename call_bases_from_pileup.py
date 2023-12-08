@@ -4,12 +4,8 @@ import numpy as np
 import re
 import sys
 
-# pileup_file = sys.argv[1] 
-# pileup_results_path = sys.argv[2] 
-
-# sra
-pileup_file = "SRR26069395_sub5_piledup.txt"
-pileup_results_path = "/Users/marniella/research/nielsen_lab/project-extra-files/phylobc/testing/SRR26069395_files/"
+pileup_file = sys.argv[1] 
+pileup_results_path = sys.argv[2] 
 
 prefix = re.sub('_piledup.txt','', pileup_file)
 prefix_base = re.sub('_sub.*','', prefix)
@@ -20,7 +16,7 @@ with open(home_dir + 'Wuhan_Hu_reference_MSA.fasta') as f:
     global_msa_reference = f.readlines()
 global_msa_reference = global_msa_reference[1].strip('\n')
 
-with open(pileup_results_path + 'SRR26069395_assemblies_msa_refonly.fasta') as f:
+with open(pileup_results_path + prefix_base + '_assemblies_msa_refonly.fasta') as f:
     assembly_msa_reference = f.readlines()
 assembly_msa_reference = assembly_msa_reference[1].strip('\n')
 
