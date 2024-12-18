@@ -6,20 +6,40 @@ import sys
 
 pileup_file = sys.argv[1] 
 pileup_results_path = sys.argv[2] 
+call_mode = sys.argv[3]
 
-prior_threshold = [0.0001, 0.001, 0.01, 0.1]
+# pileup_file = "SRR26069427_piledup.txt"
+# pileup_results_path = "/space/s1/marniella/phylogenetic-base-calling/sra_raw_read_results/SRR26069427_files/"
 
-# for SRA
-prefix = re.sub('_piledup.txt','', pileup_file)
-prefix_base = re.sub('_sub.+', '', prefix)
+prior_scaling = [0.0001, 0.001, 0.01, 0.1]
 
-# for GISAID
-# prefix = re.sub('_piledup.txt','', pileup_file)
-# prefix_base = re.sub('_[0-9]*\.*[0-9]+x_cov.sim.+', '', prefix) # re.sub('.sim.+', '', prefix)
+if "SRR" in pileup_file:
+    # for SRA
+    prefix = re.sub('_piledup.txt','', pileup_file)
+    prefix_base = re.sub('_sub.+', '', prefix)
+else:
+    # for GISAID
+    prefix = re.sub('_piledup.txt','', pileup_file)
+    prefix_base = re.sub('_[0-9]*\.*[0-9]+x_cov.sim.+', '', prefix) # re.sub('.sim.+', '', prefix)
 
 with open(pileup_results_path + prefix + '_sa.fasta') as f: 
     subsample_assembly = f.readlines()
 subsample_assembly = subsample_assembly[1].strip('\n')
+
+# read the ground truth in order to score in the next step 
+with open(pileup_results_path + re.sub("_err.*$","",prefix_base) + '_gt.fasta') as f: 
+    ground_truth_assembly = f.readlines()
+ground_truth_assembly = ground_truth_assembly[1].strip('\n')
+
+# read the reference in order to get the indexing right for indels
+with open(pileup_results_path + prefix_base + '_assemblies_msa_refonly.fasta') as f: 
+    assembly_msa_ref = f.readlines()
+assembly_msa_ref = assembly_msa_ref[1].strip('\n')
+
+# pileup_dict_idx[9] will give us the index in the MSA corresponding to the 10th position of Wuhan-Hu-1
+# so then pileup_dict_idx.index(9) will give us the position of the 10th Wuhan-Hu-1 base in the MSA, allowing us to connect pileup/prior to assembly and ground truth 
+# need to access using pileup_dict_idx.index(9)+1 in the pileup_dict/prior_dict because of indexing difference
+pileup_dict_idx = [(p+1) for p,b in enumerate(assembly_msa_ref) if b!= "-"]
 
 header = ['A','C','G','T','-']
 pattern1 = re.compile('-[0-9]+[ACGTNacgtn]+')
@@ -82,16 +102,15 @@ with open(pileup_path) as f:
         (pos, ref_base, n_reads, match_str, phred_list) = str.split(line.strip('\n'), '\t')[1:6]
         pos = int(pos) 
         # if pos does not have a tronko prior, skip
-        if pos not in bases_prior_dict:
+        if pos not in pileup_dict_idx:
             continue
         pr_list = bases_prior_dict[pos]
         # read likelihoods & calculate posteriors
         match_str = pattern1.sub('', pattern2.sub('', pattern3.sub('', pattern4.sub('', match_str))))
         q_list = np.array([get_q(ref_base, m, pow(10, -(ord(p) - 33) / 10.0)) for m, p in zip(match_str, phred_list)], dtype='float')
         ll_list = np.prod(q_list, axis=0)
-        for thresh in prior_threshold:
-            # upper limit on priors Pi* = (Pi+c/4)/(c+ P1+P2+P3+P4)
-            c = thresh 
+        for c in prior_scaling:
+            # prior "scaling" : Pi* = (Pi+c/4)/(c+ P1+P2+P3+P4)
             pr_list = [(p + c/4)/(np.sum(pr_list) + c) for p in pr_list]
             pp_list = pr_list
             pp_list = np.multiply(pr_list, ll_list) # try normal calculations
@@ -100,48 +119,85 @@ with open(pileup_path) as f:
                 log_ll_list = np.nansum( # get log likelihoods
                     [ np.log10(np.append(q[:4], np.min(q[:4]) / 10.0)) if (np.sum(q) < 5) else np.array([0]*5) for q in q_list ], axis = 0) 
                 if (np.sum(log_ll_list) == 0.0) and (subsample_assembly[pos-1] == '-'): 
-                    log_pp_list = np.array([-1]*4 + [0]) # we do not make a call if there is a gap in the assembly
+                    log_pp_list = np.array([-1]*4 + [0]) # we do not make a call if there is a gap 
                 else:
                     log_pp_list = np.add(log_pr_list, log_ll_list) # get log posteriors if no gap
                 ll_list = [np.power(10, ll - np.max(log_ll_list)) for ll in log_ll_list] # normalize log likelihoods, exponent
                 pp_list = [np.power(10, pp - np.max(log_pp_list)) for pp in log_pp_list] # normalize log posteriors, exponent
             else: # normal calculations can proceed
                 if (np.sum(ll_list) == 5.0) and (subsample_assembly[pos-1] == '-'): 
-                    pp_list = np.array([0]*4 + [1]) # we do not make a call if there is a gap in the assembly
+                    pp_list = np.array([0]*4 + [1]) # we do not make a call if there is a gap 
                     ll_list = [0]*4 + [1]
                 else: 
                     pp_list = np.multiply(pr_list, ll_list) # get posteriors if no gap
             # probabilities need to sum to 1
             pp_list = np.divide(pp_list,sum(pp_list))
             pr_list = np.divide(pr_list,sum(pr_list))
-            if thresh in pileup_dict:
-                pileup_dict[thresh][pos] = (pr_list, ll_list, pp_list, match_str, ref_base)
+            if c in pileup_dict:
+                pileup_dict[c][pos] = (pr_list, ll_list, pp_list, match_str, ref_base)
             else:
-                pileup_dict[thresh] = {pos:(pr_list, ll_list, pp_list, match_str, ref_base)}
+                pileup_dict[c] = {pos:(pr_list, ll_list, pp_list, match_str, ref_base)}
 
-positions_idx = sorted(list(pileup_dict.keys()))
-
-pr = [header[np.nanargmax(bases_prior_dict[p])] if (subsample_assembly[p-1] != "-") else "-" for p in bases_prior_dict]
-ll = [header[np.nanargmax(pileup_dict[0.1][p+1][1])] if (p+1 in pileup_dict[0.1]) else "N" for p in range(len(pr))]
-
-pp = {
-    thresh:[header[np.nanargmax(pileup_dict[thresh][p+1][2])] if ((p+1 in pileup_dict[thresh]) & (b!='-')) else b for p,b in enumerate(pr)] 
-    for thresh in prior_threshold}
-
-# only for the full-coverage base calls
-if prefix == prefix_base:
-    prefix = prefix + "_full"
-    prefix_base = prefix_base + "_full"
-
-with open(pileup_results_path + prefix + '_prob_calls.fasta', 'a') as f:
-    for thresh in prior_threshold:
-        f.write('>' + prefix + '_pr_thresh' + str(thresh) + '_postprob_calls\n')
-        f.write(''.join(pp[thresh]) + '\n')
-    f.write('>' + prefix + '_priorprob_calls\n')
-    f.write(''.join(pr) + '\n')
-    f.write('>' + prefix + '_likelihood_calls\n')
-    f.write(''.join(ll) + '\n')
-
-# now instead of the calls_by_pos we need to deal with msat for scoring
+if call_mode != "roc":
+    for c in prior_scaling:
+        with open(pileup_results_path + prefix_base + '_prob_calls_pr_scaling' + str(c) + '.txt', 'a') as f:
+            for msa_idx,(s, g, ref) in enumerate(zip(subsample_assembly, ground_truth_assembly, assembly_msa_ref)):
+                msa_idx = msa_idx+1
+                if msa_idx not in pileup_dict_idx: # this is a gap in Wuhan-Hu-1 reference, therefore tronko prior too
+                    continue
+                else:
+                    ref_idx = pileup_dict_idx.index(msa_idx)+1
+                    if ref_idx not in pileup_dict[c]:
+                        #this position had no reads, call N in LL, then PR for both PR/PP
+                        scaled_pr = [(p + c/4)/(np.sum(pr_list) + c) for p in bases_prior_dict[ref_idx]]
+                        r = header[np.nanargmax(scaled_pr)]
+                        (r,l,p) = (r, "N", r)
+                        mincov3_met = 0
+                    else:
+                        #this position is in the pileup, pileup dict contains scaled PR, LL, and PP
+                        # sometimes pileup has * (no reads), so use prior in these cases (force to be N)
+                        pileup_entry = pileup_dict[c][ref_idx]
+                        (r,l,p) = (header[np.nanargmax(e)] if np.nanargmax(e) < 4 else "N" for e in [pileup_entry[0], pileup_entry[1], pileup_entry[2]])
+                        if l == "N" and p == "N":
+                            l,p = (r,r)
+                        mincov3_met = int(len(pileup_entry[3]) >= 3)
+                    if prefix == prefix_base: # only for the full-coverage base calls
+                        f.write(','.join([prefix + "_full", str(ref_idx), str(msa_idx), str(mincov3_met), g, s, r, l, p]) + '\n')
+                    else:
+                        f.write(','.join([prefix, str(ref_idx), str(msa_idx), str(mincov3_met), g, s, r, l, p]) + '\n')
+elif call_mode == "roc":
+    c = 0.001 # choose one prior scaling factor
+    posterior_thesholds = [ # add additional columns to mask posterior calls
+        0.999999999999, 0.999999999995, 0.99999999999, 0.99999999995, 0.9999999999, 0.9999999995, 0.999999999, 0.999999995, 0.99999999,0.99999995,
+        0.9999999, 0.9999995, 0.999999, 0.999995, 0.99999, 0.9999,0.999,0.99,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5]
+    with open(pileup_results_path + prefix_base + '_prob_calls_pr_scaling' + str(c) + '_ROC.txt', 'a') as f:
+        # header written separately but here to remember order
+        # f.write(','.join(['sample', 'pos','mincov3_met'] + ["pp_thresh_pass_" + str(p) for p in posterior_thesholds] + ['GT','SA','PR','LL','PP']) + '\n')
+        for msa_idx,(s, g, ref) in enumerate(zip(subsample_assembly, ground_truth_assembly, assembly_msa_ref)):
+            msa_idx = msa_idx+1
+            if msa_idx not in pileup_dict_idx: # this is a gap in Wuhan-Hu-1 reference, we skip
+                continue
+            else:
+                ref_idx = pileup_dict_idx.index(msa_idx)+1
+                if ref_idx not in pileup_dict[c]:
+                    #this position had no reads, call N in LL, then PR for both PR/PP
+                    scaled_pr = [(p + c/4)/(np.sum(pr_list) + c) for p in bases_prior_dict[ref_idx]]
+                    r = header[np.nanargmax(scaled_pr)]
+                    thresholds_passed = [int(np.nanmax(scaled_pr) >= pp_thresh) for pp_thresh in posterior_thesholds]
+                    (r,l,p) = (r, "N", r)
+                    mincov3_met = 0
+                else:
+                    #this position had reads, pileup dict contains scaled PR, LL, and PP
+                    # sometimes pileup has * (no reads), so use prior in these cases (force to be N)
+                    pileup_entry = pileup_dict[c][ref_idx]
+                    (r,l,p) = (header[np.nanargmax(e)] if np.nanargmax(e) < 4 else "N" for e in [pileup_entry[0], pileup_entry[1], pileup_entry[2]])
+                    if l == "N" and p == "N":
+                        l,p = (r,r)
+                    thresholds_passed = [int(np.nanmax(pileup_entry[2]) >= pp_thresh) if (np.nanargmax(pileup_entry[2]) < 4) else (int(np.nanmax(pileup_entry[0]) >= pp_thresh)) for pp_thresh in posterior_thesholds]
+                    mincov3_met = int(len(pileup_entry[3]) >= 3)
+                if prefix == prefix_base: # only for the full-coverage base calls
+                    f.write(','.join([prefix + "_full", str(ref_idx), str(msa_idx), str(mincov3_met)] + [str(i) for i in thresholds_passed] + [g, s, r, l, p]) + '\n')
+                else:
+                    f.write(','.join([prefix, str(ref_idx), str(msa_idx), str(mincov3_met)] + [str(i) for i in thresholds_passed] + [g, s, r, l, p]) + '\n')
 
 
