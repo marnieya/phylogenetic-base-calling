@@ -46,61 +46,51 @@ with open(calls_file_path_list[0]) as f:
     first_line = f.readline()
 call_idxs_dict = {header_name:i for i,header_name in enumerate(str.split(first_line.strip("\n"),","))}
 
-# exclude positions where even at full coverage we would not get it right
-# from manual review, these are usually indels 
-indel_regions = {}
-for calls_file_path in calls_file_path_list:
-    # only using prior scaling factor 0.001, which performs indististinguishably from 0.001
-    if "0.001" not in calls_file_path:
-        continue
-    sample_indel_regions = set()
-    with open(calls_file_path) as f:
-        next(f)
-        for line in f: 
-            line_list = str.split(line.strip(), ",")
-            depth = str.split(line_list[call_idxs_dict['sample']],"_")[1]
-            sample = str.split(line_list[call_idxs_dict['sample']],"_")[0]
-            if depth != "full":
-                continue
-            else:
-                sa_call = compare_nucleotides(line_list[call_idxs_dict['SA']],
-                                            line_list[call_idxs_dict['GT']])
-                pp_call = compare_nucleotides(line_list[call_idxs_dict['PP']],
-                                            line_list[call_idxs_dict['GT']])
-                if (sa_call[0] == 1) & (pp_call[0] == 0):
-                    sample_indel_regions = {int(line_list[call_idxs_dict['pos']])} | sample_indel_regions
-        if len(sample_indel_regions) > 0:
-            indel_regions[sample] = sample_indel_regions
+# # exclude positions where even at full coverage we would not get it right
+# indel_regions = {}
+# for calls_file_path in calls_file_path_list:
+#     sample_indel_regions = set()
+#     with open(calls_file_path) as f:
+#         next(f)
+#         for line in f: 
+#             line_list = str.split(line.strip(), ",")
+#             depth = str.split(line_list[call_idxs_dict['sample']],"_")[1]
+#             sample = str.split(line_list[call_idxs_dict['sample']],"_")[0]
+#             if depth != "full":
+#                 continue
+#             else:
+#                 sa_call = compare_nucleotides(line_list[call_idxs_dict['SA']],
+#                                             line_list[call_idxs_dict['GT']])
+#                 pp_call = compare_nucleotides(line_list[call_idxs_dict['PP']],
+#                                             line_list[call_idxs_dict['GT']])
+#                 if (sa_call[0] == 1) & (pp_call[0] == 0):
+#                     sample_indel_regions = {int(line_list[call_idxs_dict['pos']])} | sample_indel_regions
+#         if len(sample_indel_regions) > 0:
+#             indel_regions[sample] = sample_indel_regions
 
 # now manual review, outside of indel positions, where do we get it wrong?
-for calls_file_path in calls_file_path_list:
-    # only using prior scaling factor 0.001, which performs indististinguishably from 0.001
-    if "0.001" not in calls_file_path:
-        continue
-    with open(calls_file_path) as f:
-        next(f)
-        for line in f: 
-            line_list = str.split(line.strip(), ",")
-            depth = str.split(line_list[call_idxs_dict['sample']],"_")[1]
-            sample = str.split(line_list[call_idxs_dict['sample']],"_")[0]
-            pos = int(line_list[call_idxs_dict['pos']])
-            if ((sample in indel_regions) and (pos in indel_regions[sample])) or (depth == "full"):
-                continue
-            else:
-                sa_call = compare_nucleotides(line_list[call_idxs_dict['SA']],
-                                            line_list[call_idxs_dict['GT']])
-                pp_call = compare_nucleotides(line_list[call_idxs_dict['PP']],
-                                            line_list[call_idxs_dict['GT']])
-                if (sa_call[0] == 1) & (pp_call[0] == 0):
-                    print(','.join(line_list))
+# for calls_file_path in calls_file_path_list:
+#     with open(calls_file_path) as f:
+#         next(f)
+#         for line in f: 
+#             line_list = str.split(line.strip(), ",")
+#             depth = str.split(line_list[call_idxs_dict['sample']],"_")[1]
+#             sample = str.split(line_list[call_idxs_dict['sample']],"_")[0]
+#             pos = int(line_list[call_idxs_dict['pos']])
+#             sa_call = compare_nucleotides(line_list[call_idxs_dict['SA']],
+#                                         line_list[call_idxs_dict['GT']])
+#             pp_call = compare_nucleotides(line_list[call_idxs_dict['PP']],
+#                                         line_list[call_idxs_dict['GT']])
+#             if (sa_call[0] == 1) & (pp_call[0] == 0):
+#                 print(','.join(line_list))
 
 
 problem_sites = pd.read_table("/space/s1/marniella/phylogenetic-base-calling/SARS_CoV_2_problem_sites.txt",header=0,sep="\t")
 caution_sites = problem_sites[problem_sites.FILTER == 'caution']['POS'].tolist()
 mask_sites = problem_sites[problem_sites.FILTER == 'mask']['POS'].tolist() 
 
-center_samples = pd.read_table("/space/s1/marniella/phylogenetic-base-calling/sra_raw_read_results/SRA_Illumina_Runs_230814-230919_random_sample.csv",header=0,sep=",")
-outlier_center_samples = center_samples[center_samples.CenterName == 'LAOPHWGS']['Run'].tolist() 
+# center_samples = pd.read_table("/space/s1/marniella/phylogenetic-base-calling/sra_raw_read_results/SRA_Illumina_Runs_230814-230919_random_sample.csv",header=0,sep=",")
+# outlier_center_samples = center_samples[center_samples.CenterName == 'LAOPHWGS']['Run'].tolist() 
 
 methods = ['SA','PR','LL','PP']
 
@@ -114,7 +104,11 @@ method_totals = {}
 for calls_file_path in calls_file_path_list:
     with open(calls_file_path) as f:
         next(f)
+        pr_scaling = float(re.sub(".txt","",str.split(calls_file_path,"pr_scaling")[1]))
         for line in f: 
+            line_list = str.split(line.strip(), ",")
+            depth = str.split(line_list[call_idxs_dict['sample']],"_")[1]
+            sample = str.split(line_list[call_idxs_dict['sample']],"_")[0]
             if depth == "full": # look at subsamples only, if full depth, skip
                 break
             else:
@@ -129,13 +123,11 @@ for calls_file_path in calls_file_path_list:
                     [sample,subsample] = [re.sub("_cov.*","",s.strip("_")) for s in sample_subsample.split("err")]
                 else:
                     [sample,subsample] = sample_subsample.split("_")
-                sample_center = sample in outlier_center_samples
+                # sample_center = sample in outlier_center_samples
                 subsample = re.sub("_sub","",subsample)
-                sample_subsample = (sample + "_" + subsample) + "_" + str(sample_center) + "_" + str(cov_met)
+                sample_subsample = (sample + "_" + subsample) + "_" + str(cov_met) + "_" + str(pr_scaling)
                 
                 pos = line_list[call_idxs_dict['pos']]
-                if int(pos) in indel_regions[sample]: # if indel, skip
-                    break
                 pos_mask = "" 
                 if int(pos) in mask_sites:
                     pos_mask = "mask" 
@@ -197,13 +189,12 @@ for calls_file_path in calls_file_path_list:
                         else:
                             pos_sub_scores_dict[pos_subsample] = new_scores
 
-with open(calls_folder_path + "all_calls_summarized_by_sample.txt",'a') as f:
+with open(calls_folder_path + "all_prob_calls_summarized_by_sample.txt",'a') as f:
     for samp_sub,scores_list in samp_sub_scores_dict.items():
         for method_scores,method_name in zip(scores_list,methods):
             f.write(','.join([samp_sub, method_name] + [str(s) for s in method_scores]) + '\n')
-with open(calls_folder_path + "all_calls_summarized_by_pos.txt",'a') as f:
+with open(calls_folder_path + "all_prob_calls_summarized_by_pos.txt",'a') as f:
     for pos_subsample,scores_list in pos_sub_scores_dict.items():
         for method_scores,method_name in zip(scores_list,methods):
             f.write(','.join([pos_subsample, method_name] + [str(s) for s in method_scores]) + '\n')
-
 
