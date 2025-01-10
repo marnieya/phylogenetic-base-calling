@@ -13,9 +13,6 @@ pileup_file = sys.argv[1]
 pileup_results_path = sys.argv[2] 
 call_mode = sys.argv[3]
 
-# pileup_file = "SRR26069449_piledup.txt"
-# pileup_results_path = "/space/s1/marniella/phylogenetic-base-calling/sra_raw_read_results/SRR26069449_files/"
-
 prior_scaling = [0.0001, 0.001, 0.01, 0.1]
 
 if "SRR" in pileup_file:
@@ -42,8 +39,6 @@ with open(pileup_results_path + prefix_base + '_assemblies_msa_refonly.fasta') a
 assembly_msa_ref = assembly_msa_ref[1].strip('\n')
 
 # msa_dict_idx[9] will give us the index in the MSA corresponding to the 10th position of Wuhan-Hu-1
-# so then msa_dict_idx.index(9) will give us the position of the 10th Wuhan-Hu-1 base in the MSA, allowing us to connect pileup/prior to assembly and ground truth 
-# need to access using msa_dict_idx.index(9)+1 in the pileup_dict/prior_dict because of indexing difference
 msa_dict_idx = [p for p,b in enumerate(assembly_msa_ref) if b!= "-"] 
 
 header = ['A','C','G','T','-']
@@ -112,8 +107,9 @@ with open(pileup_path) as f:
         pos = int(pos)
         if (pos < ground_truth_pos_start) or (pos >= tronko_pos_max):
             continue
-        is_insertion = (assembly_msa_ref[pos-1] == '-')
-        is_deletion = (ground_truth_assembly[pos-1] == '-')
+        msa_idx = msa_dict_idx[pos-1]
+        is_insertion = (assembly_msa_ref[msa_idx] == '-')
+        is_deletion = (ground_truth_assembly[msa_idx] == '-')
         if is_deletion or is_insertion:
             continue
         else:
@@ -160,7 +156,7 @@ if call_mode != "roc":
                     continue
                 elif g == "-": # this is a deletion, no read info, we skip
                     continue
-                elif g == "N": # if no call at full depth, also skip
+                elif g == "N": # if no call at full depth, skip
                     continue
                 else:
                     pileup_pos = msa_dict_idx.index(msa_idx) + 1
