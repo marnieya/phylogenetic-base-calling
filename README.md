@@ -1,6 +1,6 @@
 Note: Shell scripts document how the data was manipulated, but are not meant to be executed as a pipeline at the moment. 
 
-### Pipeline
+### Script reference tree
 
 ```
 step0_run_all_steps.sh                # outlines how the shell scripts fit together
@@ -15,7 +15,7 @@ step0_run_all_steps.sh                # outlines how the shell scripts fit toget
 └─ ./aggregate_coverage.sh {real|reps|sim} <dir>   # has to be run three times, once per data source
 ```
 
-#### Plotting module dependencies
+#### Plotting dependencies
 
 ```
 plot_main_figures.py  ─┬─> roc_real_data.py ─┬─> compare_nucleotides.py
