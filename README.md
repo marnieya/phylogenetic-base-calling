@@ -1,6 +1,6 @@
 Note: Shell scripts document how the data was manipulated, but are not meant to be executed as a pipeline at the moment. 
 
-## Reference tree
+### Reference tree
   step0_run_all_steps.sh                # outlines how the different shell scripts fit together
   ├─ step1_sra_to_fastq.sh              # download/prepare real SRA reads
   ├─ step1_gisaid_to_fastq.sh           # simulate reads from GISAID genomes
@@ -12,7 +12,7 @@ Note: Shell scripts document how the data was manipulated, but are not meant to 
   ├─ python plot_supp_figures.py        # supplemental figures
   └─ ./aggregate_coverage.sh {real|reps|sim} <dir>   # has to be run three times, once per data source
 
-  ## Plotting dependencies
+  ### Plotting dependencies
   plot_main_figures.py  ─┬─> roc_real_data.py ─┬─> compare_nucleotides.py
   plot_supp_figures.py  ─┤                     └─> plot_common.py
                           ├─> roc_sim_data.py  ───> compare_nucleotides.py, plot_common.py
