@@ -1258,7 +1258,8 @@ if __name__ == "__main__":
                 {condition: ms[condition]}, {condition: mts[condition]}
             ))
 
-        real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_callrate.csv"))
+        real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_callrate.csv"),
+                                  value_label="call_rate")
         mle_mode_t_idx = real._mode_crossover_threshold(crossover["pr_scaling=MLE"])
 
         print(f"Saving real-data cache to {REAL_CACHE_PATH} ...")

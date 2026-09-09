@@ -423,17 +423,21 @@ def sim_sa_pp_by_error_rate_by_run(stats, threshold_stats):
 def pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
     """
     Repurposes plot_main_figures.py's crossover-CSV machinery
-    (roc_real_data.write_crossover_csv, unchanged) for a different metric:
+    (roc_real_data.write_crossover_csv) for a different metric:
     roc_real_data.find_pp_sa_crossover_accuracy instead of
     find_pp_sa_crossover -- least-stringent threshold whose *accuracy*
     meets or exceeds SA's, rather than most-stringent threshold whose
     *call rate* meets or exceeds SA's. See that function's docstring, and
     CLAUDE.md's "Crossover analysis" section, for the two definitions and
-    why they scan in opposite directions.
+    why they scan in opposite directions. value_label="accuracy" names the
+    CSV's two value columns "pp_accuracy"/"sa_accuracy" (the accuracy-based
+    counterpart's tables are named "pp_call_rate"/"sa_call_rate" instead,
+    via find_pp_sa_crossover's own call to this same writer).
     Output: pp_sa_crossover_accuracy.csv
     """
     crossover = real.find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats)
-    real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_accuracy.csv"))
+    real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_accuracy.csv"),
+                              value_label="accuracy")
 
 
 # ---------------------------------------------------------------------------
