@@ -702,25 +702,28 @@ def find_pp_sa_crossover(mean_stats, mean_thr_stats):
     the strictest threshold (t_idx=0), that index is returned directly.
 
     Returns crossover[condition][subsample] = (threshold_value, threshold_idx,
-    pp_call_rate, sa_call_rate), or (None, None, None, None) if no call rate
-    data is available at any threshold. pp_call_rate is PP's call rate at
-    threshold_idx -- the value actually compared against sa_call_rate to find
-    the crossover, kept here so it doesn't have to be looked back up from
-    mean_thr_stats later. sa_call_rate is SA's own call rate for that
-    (condition, subsample), included alongside it for reference even though
-    it doesn't vary by threshold.
+    pp_call_rate, sa_call_rate, pp_accuracy, sa_accuracy), or a 6-tuple of
+    None if no call rate data is available at any threshold. Call rate is
+    what drives the crossover here; accuracy at the same threshold is
+    reported alongside it (not compared) so the CSV can show the tradeoff --
+    what accuracy PP reached at the threshold where its call rate caught up
+    to SA's. pp_* are PP's values at threshold_idx; sa_* are SA's own values
+    for that (condition, subsample), threshold-independent but included for
+    reference. mean_stats[...]["SA"] and mean_thr_stats[...][t_idx] are both
+    (mean_acc, mean_cr) pairs, so both metrics are already on hand.
     """
     crossover = {}
     for condition in mean_stats:
         crossover[condition] = {}
         for subsample in SUBSAMPLE_ORDER:
-            _, sa_cr = mean_stats[condition][subsample].get(
+            sa_acc, sa_cr = mean_stats[condition][subsample].get(
                 "SA", (float("nan"), float("nan"))
             )
             last_valid_idx = None
-            last_valid_cr = None
+            last_valid_pp_cr = None
+            last_valid_pp_acc = None
             for t_idx in range(N_THRESHOLDS - 1, -1, -1):
-                _, pp_cr = mean_thr_stats[condition][subsample].get(
+                pp_acc, pp_cr = mean_thr_stats[condition][subsample].get(
                     t_idx, (float("nan"), float("nan"))
                 )
                 if pp_cr != pp_cr:  # NaN: no data at this threshold, skip it
@@ -728,12 +731,14 @@ def find_pp_sa_crossover(mean_stats, mean_thr_stats):
                 if pp_cr < sa_cr:
                     break
                 last_valid_idx = t_idx
-                last_valid_cr = pp_cr
+                last_valid_pp_cr = pp_cr
+                last_valid_pp_acc = pp_acc
             if last_valid_idx is None:
-                crossover[condition][subsample] = (None, None, None, None)
+                crossover[condition][subsample] = (None, None, None, None, None, None)
             else:
                 crossover[condition][subsample] = (
-                    THRESHOLDS[last_valid_idx], last_valid_idx, last_valid_cr, sa_cr
+                    THRESHOLDS[last_valid_idx], last_valid_idx,
+                    last_valid_pp_cr, sa_cr, last_valid_pp_acc, sa_acc,
                 )
     return crossover
 
@@ -762,25 +767,28 @@ def find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
     (t_idx=N_THRESHOLDS-1), that index is returned directly.
 
     Returns crossover[condition][subsample] = (threshold_value, threshold_idx,
-    pp_accuracy, sa_accuracy), or (None, None, None, None) if no accuracy
-    data is available at any threshold. pp_accuracy is PP's accuracy at
-    threshold_idx -- the value actually compared against sa_accuracy to find
-    the crossover, kept here so it doesn't have to be looked back up from
-    mean_thr_stats later. sa_accuracy is SA's own accuracy for that
-    (condition, subsample), included alongside it for reference even though
-    it doesn't vary by threshold.
+    pp_call_rate, sa_call_rate, pp_accuracy, sa_accuracy), or a 6-tuple of
+    None if no accuracy data is available at any threshold -- the same tuple
+    shape as find_pp_sa_crossover, so write_crossover_csv / _tidy handle
+    both identically. Accuracy is what drives the crossover here; call rate
+    at the same threshold is reported alongside it (not compared) so the CSV
+    can show the tradeoff -- what call rate PP was left with at the threshold
+    where its accuracy first matched SA's. pp_* are PP's values at
+    threshold_idx; sa_* are SA's own values for that (condition, subsample),
+    threshold-independent but included for reference.
     """
     crossover = {}
     for condition in mean_stats:
         crossover[condition] = {}
         for subsample in SUBSAMPLE_ORDER:
-            sa_acc, _ = mean_stats[condition][subsample].get(
+            sa_acc, sa_cr = mean_stats[condition][subsample].get(
                 "SA", (float("nan"), float("nan"))
             )
             last_valid_idx = None
-            last_valid_acc = None
+            last_valid_pp_acc = None
+            last_valid_pp_cr = None
             for t_idx in range(N_THRESHOLDS):
-                pp_acc, _ = mean_thr_stats[condition][subsample].get(
+                pp_acc, pp_cr = mean_thr_stats[condition][subsample].get(
                     t_idx, (float("nan"), float("nan"))
                 )
                 if pp_acc != pp_acc:  # NaN: no data at this threshold, skip it
@@ -788,34 +796,41 @@ def find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
                 if pp_acc < sa_acc:
                     break
                 last_valid_idx = t_idx
-                last_valid_acc = pp_acc
+                last_valid_pp_acc = pp_acc
+                last_valid_pp_cr = pp_cr
             if last_valid_idx is None:
-                crossover[condition][subsample] = (None, None, None, None)
+                crossover[condition][subsample] = (None, None, None, None, None, None)
             else:
                 crossover[condition][subsample] = (
-                    THRESHOLDS[last_valid_idx], last_valid_idx, last_valid_acc, sa_acc
+                    THRESHOLDS[last_valid_idx], last_valid_idx,
+                    last_valid_pp_cr, sa_cr, last_valid_pp_acc, sa_acc,
                 )
     return crossover
 
 
-def write_crossover_csv(crossover, filename="pp_sa_crossover.csv", value_label="value"):
+_CROSSOVER_VALUE_COLS = ["pp_call_rate", "sa_call_rate", "pp_accuracy", "sa_accuracy"]
+
+
+def write_crossover_csv(crossover, filename="pp_sa_crossover.csv"):
     """Write the full crossover dict to CSV (all conditions, all subsamples
-    with data). Each row also includes the PP/SA values that were actually
-    compared to find the crossover -- named "pp_<value_label>"/
-    "sa_<value_label>" so the same writer serves both find_pp_sa_crossover
-    (value_label="call_rate") and find_pp_sa_crossover_accuracy
-    (value_label="accuracy") without the column names being generic/
-    ambiguous in either file. (condition, subsample) entries with no
-    crossover found (threshold_idx is None -- no data at all for that
-    combination, as opposed to a threshold search that came up empty) are
-    skipped rather than written as a blank row, matching
-    write_crossover_csv_tidy's own behavior -- there's nothing meaningful
-    to report for a combination the underlying call files never had."""
-    pp_col = f"pp_{value_label}"
-    sa_col = f"sa_{value_label}"
+    with data). Every row carries all four metric values at the crossover
+    threshold -- pp_call_rate, sa_call_rate, pp_accuracy, sa_accuracy -- not
+    just the one that drove the search, so both the call-rate file
+    (find_pp_sa_crossover) and the accuracy file
+    (find_pp_sa_crossover_accuracy) have identical columns and each shows
+    the full tradeoff at its own crossover point. The two files still differ
+    in which threshold each row reports (whichever metric drove that file's
+    search). (condition, subsample) entries with no crossover found
+    (threshold_idx is None -- no data at all for that combination, as
+    opposed to a threshold search that came up empty) are skipped rather
+    than written as a blank row, matching write_crossover_csv_tidy's own
+    behavior -- there's nothing meaningful to report for a combination the
+    underlying call files never had."""
+    fieldnames = ["condition", "subsample", "threshold", "threshold_idx"] + _CROSSOVER_VALUE_COLS
     rows = []
     for condition, sub_dict in crossover.items():
-        for subsample, (threshold, t_idx, pp_value, sa_value) in sub_dict.items():
+        for subsample, entry in sub_dict.items():
+            (threshold, t_idx, pp_cr, sa_cr, pp_acc, sa_acc) = entry
             if t_idx is None:
                 continue
             rows.append({
@@ -823,14 +838,13 @@ def write_crossover_csv(crossover, filename="pp_sa_crossover.csv", value_label="
                 "subsample":     subsample,
                 "threshold":     threshold,
                 "threshold_idx": t_idx,
-                pp_col:          pp_value,
-                sa_col:          sa_value,
+                "pp_call_rate":  pp_cr,
+                "sa_call_rate":  sa_cr,
+                "pp_accuracy":   pp_acc,
+                "sa_accuracy":   sa_acc,
             })
     with open(filename, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["condition", "subsample", "threshold", "threshold_idx",
-                           pp_col, sa_col]
-        )
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
     print(f"Written {filename}")
@@ -853,7 +867,7 @@ def _crossover_delta_str(t_idx):
     return f"1-{c}e-{n}"
 
 
-def write_crossover_csv_tidy(crossover, filename, value_label, decimals,
+def write_crossover_csv_tidy(crossover, filename, callrate_decimals=4, accuracy_decimals=6,
                               condition="pr_scaling=MLE", exclude_subsamples=("full",)):
     """
     Condensed, presentation-ready counterpart to write_crossover_csv's full
@@ -861,30 +875,36 @@ def write_crossover_csv_tidy(crossover, filename, value_label, decimals,
     dropped (default just "full", which isn't a true subsample and is out of
     scope for this analysis), threshold expressed as an exact "1-Ce-N" delta
     string (_crossover_delta_str, reconstructed from threshold_idx rather
-    than the printed decimal) instead of the raw decimal, and
-    pp_<value_label>/sa_<value_label> rounded to `decimals` places.
-    `condition`/`threshold_idx` columns are dropped entirely -- condition is
-    constant across rows once filtered, and threshold_idx is an internal
-    detail a reader of a results table doesn't need (the delta string next
-    to it already conveys the threshold itself). Row order follows
-    `crossover[condition]`'s own key order, which is SUBSAMPLE_ORDER's order
-    (both crossover-finding functions build it by iterating SUBSAMPLE_ORDER).
-    Subsamples with no crossover found (threshold_idx is None) are skipped.
+    than the printed decimal) instead of the raw decimal. Carries the same
+    four value columns as the full table -- pp_call_rate, sa_call_rate,
+    pp_accuracy, sa_accuracy -- with call rates rounded to `callrate_decimals`
+    (default 4) and accuracies to `accuracy_decimals` (default 6, since these
+    accuracy values all sit within ~3e-5 of 1.0 and 4 decimals would round
+    every row to an identical-looking 1.0000). `condition`/`threshold_idx`
+    columns are dropped entirely -- condition is constant across rows once
+    filtered, and threshold_idx is an internal detail a reader of a results
+    table doesn't need (the delta string next to it already conveys the
+    threshold itself). Row order follows `crossover[condition]`'s own key
+    order, which is SUBSAMPLE_ORDER's order (both crossover-finding functions
+    build it by iterating SUBSAMPLE_ORDER). Subsamples with no crossover
+    found (threshold_idx is None) are skipped.
     """
-    pp_col = f"pp_{value_label}"
-    sa_col = f"sa_{value_label}"
+    fieldnames = ["subsample", "threshold"] + _CROSSOVER_VALUE_COLS
     rows = []
-    for subsample, (_threshold, t_idx, pp_value, sa_value) in crossover.get(condition, {}).items():
+    for subsample, entry in crossover.get(condition, {}).items():
+        (_threshold, t_idx, pp_cr, sa_cr, pp_acc, sa_acc) = entry
         if subsample in exclude_subsamples or t_idx is None:
             continue
         rows.append({
-            "subsample": subsample,
-            "threshold": _crossover_delta_str(t_idx),
-            pp_col:      round(pp_value, decimals),
-            sa_col:      round(sa_value, decimals),
+            "subsample":    subsample,
+            "threshold":    _crossover_delta_str(t_idx),
+            "pp_call_rate": round(pp_cr, callrate_decimals),
+            "sa_call_rate": round(sa_cr, callrate_decimals),
+            "pp_accuracy":  round(pp_acc, accuracy_decimals),
+            "sa_accuracy":  round(sa_acc, accuracy_decimals),
         })
     with open(filename, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["subsample", "threshold", pp_col, sa_col])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
     print(f"Written {filename}")
@@ -892,12 +912,12 @@ def write_crossover_csv_tidy(crossover, filename, value_label, decimals,
 
 def _mode_crossover_threshold(condition_crossover):
     """
-    Given crossover[subsample] = (threshold_value, threshold_idx, pp_value,
-    sa_value), return the mode threshold_idx across subsamples. On a tie,
-    returns the least stringent (highest index) among the tied values.
-    Returns None if no valid entries. Indexes into each tuple by position
-    (entry[1]) rather than destructuring all four fields, since this only
-    ever needs threshold_idx.
+    Given crossover[subsample] = (threshold_value, threshold_idx,
+    pp_call_rate, sa_call_rate, pp_accuracy, sa_accuracy), return the mode
+    threshold_idx across subsamples. On a tie, returns the least stringent
+    (highest index) among the tied values. Returns None if no valid entries.
+    Indexes into each tuple by position (entry[1]) rather than destructuring
+    all fields, since this only ever needs threshold_idx.
     """
     indices = [entry[1] for entry in condition_crossover.values() if entry[1] is not None]
     if not indices:

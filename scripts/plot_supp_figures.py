@@ -432,23 +432,21 @@ def pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
     meets or exceeds SA's, rather than most-stringent threshold whose
     *call rate* meets or exceeds SA's. See that function's docstring, and
     CLAUDE.md's "Crossover analysis" section, for the two definitions and
-    why they scan in opposite directions. value_label="accuracy" names the
-    CSV's two value columns "pp_accuracy"/"sa_accuracy" (the accuracy-based
-    counterpart's tables are named "pp_call_rate"/"sa_call_rate" instead,
-    via find_pp_sa_crossover's own call to this same writer).
+    why they scan in opposite directions. Both files carry the same four
+    value columns -- pp_call_rate, sa_call_rate, pp_accuracy, sa_accuracy --
+    at each file's own crossover threshold; they differ only in which metric
+    drove the threshold search (and thus which threshold each row reports).
     Also writes pp_sa_crossover_accuracy_tidy.csv via
     real.write_crossover_csv_tidy -- a condensed, presentation-ready
     version: pr_scaling=MLE only, "full" excluded, threshold as an exact
-    "1-Ce-N" delta string, pp_accuracy/sa_accuracy rounded to 6 decimals
-    (accuracy values here all sit within ~3e-5 of 1.0, so 4 decimals would
-    round every row to an identical-looking 1.0000).
+    "1-Ce-N" delta string, call rates rounded to 4 decimals and accuracies
+    to 6 (accuracy values here all sit within ~3e-5 of 1.0, so 4 decimals
+    would round every row to an identical-looking 1.0000).
     Output: pp_sa_crossover_accuracy.csv, pp_sa_crossover_accuracy_tidy.csv
     """
     crossover = real.find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats)
-    real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_accuracy.csv"),
-                              value_label="accuracy")
-    real.write_crossover_csv_tidy(crossover, filename=_out("pp_sa_crossover_accuracy_tidy.csv"),
-                                   value_label="accuracy", decimals=6)
+    real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_accuracy.csv"))
+    real.write_crossover_csv_tidy(crossover, filename=_out("pp_sa_crossover_accuracy_tidy.csv"))
 
 
 # ---------------------------------------------------------------------------
