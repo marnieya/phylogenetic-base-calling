@@ -54,6 +54,21 @@ ALL_CONDITION_COLORS = {
 }
 
 SUBSAMPLE_ORDER = ["sub0.8", "sub1", "sub3", "sub5", "sub10", "sub20", "full"]
+# Deliberately 6 depths, not the full 11 aggregate_coverage.sh's REAL_DEPTHS
+# sweeps (sub0.2/sub0.5/sub2/sub4/sub15 also excluded) -- a scope decision
+# made back when the real-data call files themselves were compiled, not a
+# plotting-side filter: the 11-depth series got unwieldy and repetitive
+# (several depths show very similar patterns) and didn't line up well
+# against the simulated pipeline's own depth set, so base-calling was only
+# ever run for these 6 real depths. The call files have no rows at all for
+# the other 5 -- confirmed by briefly widening this list to all 11, which
+# produced entirely empty crossover/aggregate entries for exactly those 5,
+# for every condition. The coverage pipeline (aggregate_coverage.sh /
+# coverage_data.py) intentionally keeps its own, wider REAL_DEPTHS
+# independent of this list -- coverage was measured at all 11 depths even
+# though base-calling wasn't, and showing that extra spread in the
+# supplemental coverage plots is useful on its own, with no need to match
+# the ROC-analysis depth set exactly.
 
 FILTER_VALUES = ["PASS", "mask", "caution"]
 
@@ -784,17 +799,25 @@ def find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
 
 
 def write_crossover_csv(crossover, filename="pp_sa_crossover.csv", value_label="value"):
-    """Write the full crossover dict to CSV (all conditions, all subsamples).
-    Each row also includes the PP/SA values that were actually compared to
-    find the crossover -- named "pp_<value_label>"/"sa_<value_label>" so the
-    same writer serves both find_pp_sa_crossover (value_label="call_rate")
-    and find_pp_sa_crossover_accuracy (value_label="accuracy") without the
-    column names being generic/ambiguous in either file."""
+    """Write the full crossover dict to CSV (all conditions, all subsamples
+    with data). Each row also includes the PP/SA values that were actually
+    compared to find the crossover -- named "pp_<value_label>"/
+    "sa_<value_label>" so the same writer serves both find_pp_sa_crossover
+    (value_label="call_rate") and find_pp_sa_crossover_accuracy
+    (value_label="accuracy") without the column names being generic/
+    ambiguous in either file. (condition, subsample) entries with no
+    crossover found (threshold_idx is None -- no data at all for that
+    combination, as opposed to a threshold search that came up empty) are
+    skipped rather than written as a blank row, matching
+    write_crossover_csv_tidy's own behavior -- there's nothing meaningful
+    to report for a combination the underlying call files never had."""
     pp_col = f"pp_{value_label}"
     sa_col = f"sa_{value_label}"
     rows = []
     for condition, sub_dict in crossover.items():
         for subsample, (threshold, t_idx, pp_value, sa_value) in sub_dict.items():
+            if t_idx is None:
+                continue
             rows.append({
                 "condition":     condition,
                 "subsample":     subsample,
@@ -808,6 +831,60 @@ def write_crossover_csv(crossover, filename="pp_sa_crossover.csv", value_label="
             f, fieldnames=["condition", "subsample", "threshold", "threshold_idx",
                            pp_col, sa_col]
         )
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Written {filename}")
+
+
+def _crossover_delta_str(t_idx):
+    """Format threshold_idx as an exact "1-Ce-N" delta string (delta = 1 -
+    threshold, C in {1,5}), reconstructed from the THRESHOLDS construction
+    formula (plot_common.py: 1 - c*10**-n for n=15..1, two steps per decade,
+    plus a t=0.0/idx=N_THRESHOLDS-1 sentinel) rather than subtracting the
+    printed decimal threshold from 1 -- that subtraction cancels almost all
+    of a float64's precision for thresholds this close to 1, since idx=0 is
+    ~1-1e-15. The sentinel (t=0.0, "always passes") has no meaningful delta;
+    returned as "0" rather than a bogus "1-5e-1"."""
+    t_idx = int(t_idx)
+    if t_idx == N_THRESHOLDS - 1:
+        return "0"
+    n = 15 - t_idx // 2
+    c = 1 if t_idx % 2 == 0 else 5
+    return f"1-{c}e-{n}"
+
+
+def write_crossover_csv_tidy(crossover, filename, value_label, decimals,
+                              condition="pr_scaling=MLE", exclude_subsamples=("full",)):
+    """
+    Condensed, presentation-ready counterpart to write_crossover_csv's full
+    table -- one condition only (default pr_scaling=MLE), exclude_subsamples
+    dropped (default just "full", which isn't a true subsample and is out of
+    scope for this analysis), threshold expressed as an exact "1-Ce-N" delta
+    string (_crossover_delta_str, reconstructed from threshold_idx rather
+    than the printed decimal) instead of the raw decimal, and
+    pp_<value_label>/sa_<value_label> rounded to `decimals` places.
+    `condition`/`threshold_idx` columns are dropped entirely -- condition is
+    constant across rows once filtered, and threshold_idx is an internal
+    detail a reader of a results table doesn't need (the delta string next
+    to it already conveys the threshold itself). Row order follows
+    `crossover[condition]`'s own key order, which is SUBSAMPLE_ORDER's order
+    (both crossover-finding functions build it by iterating SUBSAMPLE_ORDER).
+    Subsamples with no crossover found (threshold_idx is None) are skipped.
+    """
+    pp_col = f"pp_{value_label}"
+    sa_col = f"sa_{value_label}"
+    rows = []
+    for subsample, (_threshold, t_idx, pp_value, sa_value) in crossover.get(condition, {}).items():
+        if subsample in exclude_subsamples or t_idx is None:
+            continue
+        rows.append({
+            "subsample": subsample,
+            "threshold": _crossover_delta_str(t_idx),
+            pp_col:      round(pp_value, decimals),
+            sa_col:      round(sa_value, decimals),
+        })
+    with open(filename, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["subsample", "threshold", pp_col, sa_col])
         writer.writeheader()
         writer.writerows(rows)
     print(f"Written {filename}")

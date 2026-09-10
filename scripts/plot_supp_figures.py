@@ -219,9 +219,12 @@ def sa_pp_all_by_run(stats, threshold_stats):
     SA + PP curves across every subsample real data has (_REAL_SUBSAMPLES --
     real.SUBSAMPLE_ORDER minus "full", which isn't a true subsample and is
     out of scope for this analysis -- filtered to those actually present:
-    sub0.8, sub1, sub3, sub5, sub10, sub20, in that order), with every Run's
-    own SA point and PP curve plotted directly rather than one cross-run
-    mean per condition (see _draw_sa_pp_panel_by_run). Panels wrap at
+    sub0.8, sub1, sub3, sub5, sub10, sub20, in that order -- real.SUBSAMPLE_ORDER
+    is deliberately just these 6, not the wider 11-depth sweep the coverage
+    pipeline uses, since the real call files were only ever base-called at
+    these depths), with every Run's own SA point and PP curve plotted
+    directly rather than one cross-run mean per condition (see
+    _draw_sa_pp_panel_by_run). Panels wrap at
     _ALL_GRID_N_COLS (3) columns, rows growing as needed; panel sizing
     comes from mainfig._make_row_grid, so panels render at exactly
     (mainfig._ROW_PANEL_WIDTH_IN, mainfig._ROW_PANEL_HEIGHT_IN), matching
@@ -433,11 +436,19 @@ def pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
     CSV's two value columns "pp_accuracy"/"sa_accuracy" (the accuracy-based
     counterpart's tables are named "pp_call_rate"/"sa_call_rate" instead,
     via find_pp_sa_crossover's own call to this same writer).
-    Output: pp_sa_crossover_accuracy.csv
+    Also writes pp_sa_crossover_accuracy_tidy.csv via
+    real.write_crossover_csv_tidy -- a condensed, presentation-ready
+    version: pr_scaling=MLE only, "full" excluded, threshold as an exact
+    "1-Ce-N" delta string, pp_accuracy/sa_accuracy rounded to 6 decimals
+    (accuracy values here all sit within ~3e-5 of 1.0, so 4 decimals would
+    round every row to an identical-looking 1.0000).
+    Output: pp_sa_crossover_accuracy.csv, pp_sa_crossover_accuracy_tidy.csv
     """
     crossover = real.find_pp_sa_crossover_accuracy(mean_stats, mean_thr_stats)
     real.write_crossover_csv(crossover, filename=_out("pp_sa_crossover_accuracy.csv"),
                               value_label="accuracy")
+    real.write_crossover_csv_tidy(crossover, filename=_out("pp_sa_crossover_accuracy_tidy.csv"),
+                                   value_label="accuracy", decimals=6)
 
 
 # ---------------------------------------------------------------------------
