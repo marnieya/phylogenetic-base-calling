@@ -38,6 +38,7 @@ Pass any combination of the three individual flags to rebuild just those.
 Metadata CSVs (sample/filter/gene) are always reloaded fresh — they're small.
 """
 
+import csv
 import os
 import pickle
 import random
@@ -54,6 +55,7 @@ import roc_real_data as real
 import roc_sim_data as sim
 from plot_common import (
     N_THRESHOLDS,
+    THRESHOLDS,
     _PP_MARKER,
     _lerp_to_black,
     _place_pp_gradient_bars,
@@ -274,6 +276,58 @@ def sa_pp_1v5(mean_stats, mean_thr_stats):
     _draw_sa_pp_figure for the full visual-encoding description.
     Output: sa_pp_1v5.pdf"""
     _draw_sa_pp_figure(mean_stats, mean_thr_stats, ["sub1", "sub5"], _out("sa_pp_1v5.pdf"))
+
+
+def write_sa_pp_1v5_coords_csv(mean_stats, mean_thr_stats, filename=None):
+    """
+    Write the exact (mean_call_rate, mean_accuracy) coordinates plotted in
+    sa_pp_1v5.pdf to CSV -- same subsamples (sub1, sub5), but restricted to
+    just SA and PP (pr_scaling=MLE) -- unlike sa_pp_1v5.pdf itself, which
+    also draws pr_scaling=0.0; that condition is dropped here as extraneous
+    for this CSV's downstream use, not because the figure doesn't have it.
+    One row per (subsample, method, threshold); the PP row sweeps every
+    t_idx in THRESHOLDS order (index 0, most stringent ~1-1e-15, down to the
+    0.0 "always passes" sentinel at N_THRESHOLDS-1) -- including any
+    threshold where mean_thr_stats has no data (mean_call_rate/mean_accuracy
+    written as NaN), since that's the literal array _draw_sa_pp_figure
+    itself builds and plots (matplotlib just breaks the line there). SA is
+    threshold-independent -- one row per subsample, threshold written as 0
+    to sit at the loose end alongside the PP curve's own threshold=0.0
+    sentinel row.
+    Columns: subsample, method, threshold, mean_call_rate, mean_accuracy.
+    Output: sa_pp_1v5_coords.csv
+    """
+    subsamples = ["sub1", "sub5"]
+    condition = "pr_scaling=MLE"
+    filename = filename or _out("sa_pp_1v5_coords.csv")
+
+    rows = []
+    for subsample in subsamples:
+        sa_acc, sa_cr = mean_stats[condition][subsample].get(
+            "SA", (float("nan"), float("nan"))
+        )
+        rows.append({
+            "subsample": subsample, "method": "SA", "threshold": 0,
+            "mean_call_rate": sa_cr, "mean_accuracy": sa_acc,
+        })
+        method = f"PP ({condition})"
+        for t_idx in range(N_THRESHOLDS):
+            acc, cr = mean_thr_stats[condition][subsample].get(
+                t_idx, (float("nan"), float("nan"))
+            )
+            rows.append({
+                "subsample": subsample, "method": method,
+                "threshold": THRESHOLDS[t_idx],
+                "mean_call_rate": cr, "mean_accuracy": acc,
+            })
+
+    with open(filename, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "subsample", "method", "threshold", "mean_call_rate", "mean_accuracy"
+        ])
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Written {filename}")
 
 
 # ---------------------------------------------------------------------------
@@ -1186,6 +1240,57 @@ def sim_sa_pp_1v5(mean_stats, mean_thr_stats):
     print(f"Written {filename}")
 
 
+def write_sim_sa_pp_1v5_coords_csv(mean_stats, mean_thr_stats, filename=None):
+    """
+    Simulated-data analogue of write_sa_pp_1v5_coords_csv, matching
+    sim_sa_pp_1v5.pdf's own data selection: error_rate in (beta0.001,
+    beta0.007), depth in (sub1, sub5), but restricted to just SA and
+    PP (pr_scaling=MLE) -- unlike sim_sa_pp_1v5.pdf itself, which also draws
+    pr_scaling=0.0; that condition is dropped here as extraneous for this
+    CSV's downstream use, not because the figure doesn't have it (same
+    restriction as write_sa_pp_1v5_coords_csv). One row per (error_rate,
+    subsample, method, threshold); see write_sa_pp_1v5_coords_csv's
+    docstring for the threshold-sweep/NaN/SA-threshold=0 conventions,
+    identical here.
+    Columns: error_rate, subsample, method, threshold, mean_call_rate,
+    mean_accuracy.
+    Output: sim_sa_pp_1v5_coords.csv
+    """
+    error_rates = ("beta0.001", "beta0.007")
+    depths = ("sub1", "sub5")
+    condition = "pr_scaling=MLE"
+    filename = filename or _out("sim_sa_pp_1v5_coords.csv")
+
+    rows = []
+    for error_rate in error_rates:
+        for depth in depths:
+            sa_acc, sa_cr = mean_stats.get(condition, {}).get(error_rate, {}).get(
+                depth, {}
+            ).get("SA", (float("nan"), float("nan")))
+            rows.append({
+                "error_rate": error_rate, "subsample": depth, "method": "SA",
+                "threshold": 0, "mean_call_rate": sa_cr, "mean_accuracy": sa_acc,
+            })
+            method = f"PP ({condition})"
+            cond_ts = mean_thr_stats.get(condition, {}).get(error_rate, {}).get(depth, {})
+            for t_idx in range(N_THRESHOLDS):
+                acc, cr = cond_ts.get(t_idx, (float("nan"), float("nan")))
+                rows.append({
+                    "error_rate": error_rate, "subsample": depth, "method": method,
+                    "threshold": THRESHOLDS[t_idx],
+                    "mean_call_rate": cr, "mean_accuracy": acc,
+                })
+
+    with open(filename, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "error_rate", "subsample", "method", "threshold",
+            "mean_call_rate", "mean_accuracy"
+        ])
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Written {filename}")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -1334,7 +1439,9 @@ if __name__ == "__main__":
 
     # 5. Plots
     sa_pp_1v5(mean_stats, mean_thr_stats)
+    write_sa_pp_1v5_coords_csv(mean_stats, mean_thr_stats)
     sim_sa_pp_1v5(sim_mean_stats, sim_mean_thr_stats)
+    write_sim_sa_pp_1v5_coords_csv(sim_mean_stats, sim_mean_thr_stats)
     sample_metadata_1v5(stats, threshold_stats, run_metadata)
     quality_flag_1v5(mean_filter_stats, mean_filter_thr_stats)
     gene_region_1v5(mean_gene_stats, mean_gene_thr_stats, all_genes)

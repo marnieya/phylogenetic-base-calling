@@ -70,7 +70,7 @@ SUBSAMPLE_ORDER = ["sub0.8", "sub1", "sub3", "sub5", "sub10", "sub20", "full"]
 # supplemental coverage plots is useful on its own, with no need to match
 # the ROC-analysis depth set exactly.
 
-FILTER_VALUES = ["PASS", "mask", "caution"]
+FILTER_VALUES = ["pass", "caution", "mask"]
 
 STRUCTURAL_GENES = {"Envelope", "Membrane", "Nucleocapsid", "Spike"}
 GENE_REGION_TYPES = ["structural protein genes", "nonstructural genes"]
@@ -111,7 +111,7 @@ def load_sample_metadata(path):
 def load_filter_metadata(path):
     """
     Returns {pos (int): filter_value (str)}.
-    Positions absent from this dict are implicitly "PASS".
+    Positions absent from this dict are implicitly "pass".
     """
     pos_filter = {}
     with open(path, newline="") as f:
@@ -149,9 +149,9 @@ def compute_filter_lengths(pos_filter):
     n_mask    = sum(1 for v in pos_filter.values() if v == "mask")
     n_caution = sum(1 for v in pos_filter.values() if v == "caution")
     return {
-        "PASS":    GENOME_LENGTH - n_mask - n_caution,
-        "mask":    n_mask,
+        "pass":    GENOME_LENGTH - n_mask - n_caution,
         "caution": n_caution,
+        "mask":    n_mask,
     }
 
 
@@ -227,7 +227,7 @@ def read_one_condition(condition, filepath, pos_filter, pos_gene):
             else:
                 run, subsample = parts[0], "full"
 
-            filt_val = pos_filter.get(pos, "PASS")
+            filt_val = pos_filter.get(pos, "pass")
             gene_val = pos_gene.get(pos)
 
             if run not in s:

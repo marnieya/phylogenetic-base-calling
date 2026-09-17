@@ -17,6 +17,12 @@ Assumes (not re-validated row by row) that every Run/sample contributes
 exactly one row per position 1..GENOME_LENGTH, matching how
 aggregate_coverage.sh builds these files from per-position coverage_plot.txt
 inputs.
+
+read_real_coverage_by_filter is the exception to the "running (sum, count)
+per position" streaming pattern above: it collapses across positions within
+each (Run, FILTER value) group instead of across Runs within each position,
+so its accumulators are bounded by Runs x filter values x depth columns
+(tiny) rather than GENOME_LENGTH, and it needs no array('d')/array('L').
 """
 
 from array import array
@@ -146,6 +152,63 @@ def read_sim_coverage(path=SIM_COVERAGE_PATH):
         for error_rate in error_rates
     }
     return depth_cols, error_rates, mean_by_error_depth
+
+
+def read_real_coverage_by_filter(pos_filter, depth_cols, path=REAL_COVERAGE_PATH):
+    """
+    Per-Run, per-FILTER-category mean avg_depth at each of `depth_cols`, for
+    plot_supp_figures.py's "coverage by quality flag" violin row (the bottom
+    row of coverage_all.pdf) -- unlike read_real_coverage's cross-Run,
+    per-position means, this keeps one value per (Run, filter_value,
+    depth_col): the mean avg_depth, *for that Run alone*, across every
+    position carrying that FILTER value. `pos_filter` is
+    roc_real_data.load_filter_metadata's {pos: FILTER value} dict; positions
+    absent from it are implicitly "pass", same convention as the rest of the
+    real pipeline (roc_real_data.py, compute_filter_lengths). `depth_cols`
+    restricts accumulation to just the requested columns (e.g. the subset of
+    ALL_DEPTH_COLS overlapping real.SUBSAMPLE_ORDER's depths) -- unlike
+    read_real_coverage, which always reads every depth column the file has.
+
+    Every row contributes to exactly one (filter_value, depth_col) count per
+    Run (one row = one position), so a single per-(Run, filter_value) count
+    covers all of that Run's requested depth columns -- unlike
+    read_real_coverage's per-position accumulators, this never needs
+    GENOME_LENGTH-sized arrays, since the output is bounded by
+    Runs x filter values x depth_cols (tiny), not by position.
+
+    Returns {Run: {filter_value: {depth_col: mean_avg_depth}}}.
+    """
+    with open(path) as f:
+        header = f.readline().rstrip("\n").split("\t")
+        file_depth_cols = header[2:]
+        col_idx = [file_depth_cols.index(c) for c in depth_cols]
+        n = len(depth_cols)
+
+        sums   = {}  # Run -> filter_value -> [sum per depth_cols entry]
+        counts = {}  # Run -> filter_value -> position count contributing to that sum
+
+        for line in f:
+            fields = line.rstrip("\n").split("\t")
+            run = fields[0]
+            pos = int(fields[1])
+            filt = pos_filter.get(pos, "pass")
+
+            run_sums = sums.setdefault(run, {})
+            s = run_sums.setdefault(filt, [0.0] * n)
+            for i, ci in enumerate(col_idx):
+                s[i] += float(fields[2 + ci])
+
+            run_counts = counts.setdefault(run, {})
+            run_counts[filt] = run_counts.get(filt, 0) + 1
+
+    mean_by_run_filter = {}
+    for run, run_sums in sums.items():
+        run_counts = counts[run]
+        mean_by_run_filter[run] = {
+            filt: {depth_cols[i]: s[i] / run_counts[filt] for i in range(n)}
+            for filt, s in run_sums.items()
+        }
+    return mean_by_run_filter
 
 
 def sample_to_run(sample):

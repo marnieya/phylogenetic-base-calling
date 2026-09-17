@@ -35,30 +35,33 @@ CLAUDE.md's "Crossover analysis" section for how the two differ). The
 plain, call-rate-based version is pp_sa_crossover_callrate.csv, produced by
 plot_main_figures.py.
 
-Also produces three "coverage plot" figures (position vs. avg_depth) from
-coverage_only/'s aggregated coverage tables, via coverage_data.py -- a
-separate, plot-agnostic data pipeline paralleling roc_real_data.py/
-roc_sim_data.py but for coverage_only/aggregate_coverage.sh's output rather
-than the call files. See coverage_data.py and coverage_only/CLAUDE.md for
-how those tables are built/read; see the "Coverage plots" section below for
-how they're drawn. This part of the script builds its own small pickle
-cache (COVERAGE_CACHE_PATH), separate from plot_main_figures.py's, since
-reading all three coverage tables from scratch takes roughly a minute
-combined (they're large: ~2.4M / ~5.9M / ~23.9M rows).
+Also produces a "coverage plot" figure (position vs. avg_depth, plus a
+coverage-by-quality-flag row) from coverage_only/'s aggregated coverage
+tables, via coverage_data.py -- a separate, plot-agnostic data pipeline
+paralleling roc_real_data.py/roc_sim_data.py but for
+coverage_only/aggregate_coverage.sh's output rather than the call files.
+See coverage_data.py and coverage_only/CLAUDE.md for how those tables are
+built/read; see the "Coverage plots" section below for how it's drawn.
+This part of the script builds its own small pickle cache
+(COVERAGE_CACHE_PATH), separate from plot_main_figures.py's, since reading
+the two coverage tables it needs (real, sim -- the replicate table is no
+longer read here, see "Coverage plots" below) from scratch takes a while
+(they're large: ~2.4M / ~5.9M rows).
 
 Produces plot files written to OUTPUT_DIR ("supp_figures/"):
 sa_pp_all_by_run.pdf, one sim_sa_pp_err_<error_rate>_by_run.pdf per
 error_rate the simulated data has (three as of this writing -- beta0.001,
 beta0.004, beta0.007 -- but discovered from the data, not hardcoded),
-pp_sa_crossover_accuracy.csv, and coverage_real.pdf / coverage_sim.pdf /
-coverage_reps.pdf / coverage_all.pdf (the last stacking the other three
-into one 3-row figure; all four skipped, with a message, if
+pp_sa_crossover_accuracy.csv, and coverage_all.pdf (simulated/real coverage
+stacked into one 3-row figure -- the third row splitting real coverage by
+quality-flag category (pass/caution/mask); skipped, with a message, if
 coverage_only/'s aggregated tables aren't present). More supplemental
 figures (drawing on other, currently-dormant plot_roc.py /
 plot_roc_simulated.py functions) are expected to be added here later.
 """
 
 import os
+import random
 import sys
 
 import matplotlib.pyplot as plt
@@ -457,8 +460,6 @@ def pp_sa_crossover_accuracy(mean_stats, mean_thr_stats):
 _COVERAGE_FIG_WIDTH_IN  = 10.0
 _COVERAGE_FIG_HEIGHT_IN = 3.0
 _COVERAGE_LW          = 1.0
-_COVERAGE_REPS_LW     = 0.8
-_COVERAGE_REPS_ALPHA  = 0.3
 
 # Shared x-axis for every coverage plot -- built once since it's identical
 # (position 1..GENOME_LENGTH) across all three data sources.
@@ -483,8 +484,8 @@ def _draw_coverage_real(ax, depth_cols, mean_by_depth):
     not a true subsample, out of scope for this analysis; its magnitude
     (thousands of reads) is also orders of magnitude above every subsampled
     depth's, which would otherwise squash them flat on a shared linear
-    y-axis. Shared by coverage_real (its own figure) and coverage_all (one
-    row of a stacked figure)."""
+    y-axis. Used by coverage_all as its "Real subsampled data" row (no
+    standalone real-only coverage figure is produced)."""
     lfs = 8
     plot_cols = sorted(
         (c for c in depth_cols if c != "avg_depth_full"),
@@ -501,26 +502,6 @@ def _draw_coverage_real(ax, depth_cols, mean_by_depth):
               loc="upper left", bbox_to_anchor=(1.01, 1.0))
 
 
-def coverage_real(depth_cols, mean_by_depth):
-    """
-    x = position, y = mean avg_depth across Runs at that position, one line
-    per depth (color = depth) -- shows how coverage varies across the
-    genome for each subsampling depth, averaged over every Run. See
-    _draw_coverage_real for the full visual-encoding description.
-    Single wide panel -- no row-grid faceting, since there's no natural
-    "column" dimension for one genome-position track (unlike the rest of
-    this script's/plot_main_figures.py's small-multiples figures).
-    Output: coverage_real.pdf
-    """
-    fig, ax = plt.subplots(figsize=(_COVERAGE_FIG_WIDTH_IN, _COVERAGE_FIG_HEIGHT_IN))
-    _draw_coverage_real(ax, depth_cols, mean_by_depth)
-
-    filename = _out("coverage_real.pdf")
-    plt.savefig(filename, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Written {filename}")
-
-
 def _draw_coverage_sim(ax, depth_cols, error_rates, mean_by_error_depth):
     """Draws coverage_sim's content onto `ax`: color = depth, linestyle =
     error_rate, y = mean avg_depth across sample_ids at each position. Two
@@ -528,8 +509,8 @@ def _draw_coverage_sim(ax, depth_cols, error_rates, mean_by_error_depth):
     this project uses for dual color/marker encodings -- e.g.
     replicate_acc_diff's CenterName color + replicate marker) rather than
     one combined legend with an entry per (depth, error_rate) combination.
-    Shared by coverage_sim (its own figure) and coverage_all (one row of a
-    stacked figure)."""
+    Used by coverage_all as its "Simulated data" row (no standalone
+    sim-only coverage figure is produced)."""
     lfs = 8
     plot_cols = sorted(depth_cols, key=coverage_data.depth_col_sort_key)
 
@@ -555,107 +536,214 @@ def _draw_coverage_sim(ax, depth_cols, error_rates, mean_by_error_depth):
               loc="lower left", bbox_to_anchor=(1.01, 0.0))
 
 
-def coverage_sim(depth_cols, error_rates, mean_by_error_depth):
-    """
-    x = position, y = mean avg_depth across sample_ids at that position.
-    See _draw_coverage_sim for the full visual-encoding description.
-    Single wide panel, same convention as coverage_real.
-    Output: coverage_sim.pdf
-    """
-    fig, ax = plt.subplots(figsize=(_COVERAGE_FIG_WIDTH_IN, _COVERAGE_FIG_HEIGHT_IN))
-    _draw_coverage_sim(ax, depth_cols, error_rates, mean_by_error_depth)
-
-    filename = _out("coverage_sim.pdf")
-    plt.savefig(filename, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Written {filename}")
+def _subsample_to_depth_col(subsample):
+    """'sub0.8' -> 'avg_depth_0.8x' -- the coverage file's column-naming
+    convention for that same depth (coverage_data.ALL_DEPTH_COLS). Used by
+    the "coverage by quality flag" row to read/plot only the subsample
+    depths real.SUBSAMPLE_ORDER actually uses (the overlap between
+    coverage_only's wider depth sweep and the depths base-calling was
+    actually run at -- same _REAL_SUBSAMPLES list every other real-data
+    figure in this project uses), not coverage_data.ALL_DEPTH_COLS' full
+    set."""
+    return f"avg_depth_{subsample[3:]}x"
 
 
-def _draw_coverage_reps(ax, reps_by_sample, run_metadata):
-    """Draws coverage_reps' content onto `ax`: one line per (Run, replicate)
-    sample, NOT averaged (every replicate is its own line) -- depth is
-    fixed at coverage_data.REP_SUBSAMPLE (sub20) for every replicate, so
-    there's no depth dimension to color by here the way
-    coverage_real/coverage_sim have; color instead encodes CenterName (via
-    coverage_data.sample_to_run + run_metadata), matching
-    replicate_acc_diff's convention. Every line is semi-transparent
-    (_COVERAGE_REPS_ALPHA = 0.3) and rasterized: there can be hundreds of
-    (Run, replicate) samples (800 as of this writing), each a
-    full-genome-length line -- storing that many points as vector paths
-    would make the PDF enormous and slow to render/open, so just these
-    line artists are rasterized to pixels (rasterized=True) while the
-    axes/legend/text stay crisp vector graphics. Shared by coverage_reps
-    (its own figure) and coverage_all (one row of a stacked figure)."""
+# Each panel covers one pair of subsample depths -- a deliberate content
+# grouping (roughly "low/medium/high" of the 6 real depths), not a generic
+# every-Nth slice of _REAL_SUBSAMPLES, so it's spelled out explicitly rather
+# than sliced programmatically (stays correct/obvious even if
+# _REAL_SUBSAMPLES's own order or membership ever changes).
+_COVERAGE_DEPTH_GROUPS = [
+    ("sub0.8", "sub1"),
+    ("sub3", "sub5"),
+    ("sub10", "sub20"),
+]
+
+# Quality-flag color: same tab10-by-FILTER_VALUES-order assignment
+# plot_main_figures._draw_quality_flag_figure uses for quality_flag_1v5.pdf
+# (flag_colors), recomputed locally (that dict is private to
+# plot_main_figures) so a given FILTER value renders in the same color in
+# both figures.
+_COVERAGE_FILTER_COLORS = {v: cm.tab10.colors[i] for i, v in enumerate(real.FILTER_VALUES)}
+
+_COVERAGE_VIOLIN_ALPHA         = 0.3
+_COVERAGE_VIOLIN_WIDTH         = 0.22
+_COVERAGE_VIOLIN_POINT_SC      = 14
+_COVERAGE_VIOLIN_POINT_ALPHA   = 0.7
+_COVERAGE_VIOLIN_X_JITTER      = 0.06
+_COVERAGE_VIOLIN_GROUP_GAP     = 1.3   # x spacing between a panel's two depths
+_COVERAGE_VIOLIN_FILTER_OFFSET = 0.28  # x spacing between the 3 filters at one depth
+
+
+def _draw_coverage_by_filter(axes, per_run_filter_depth, depth_groups=_COVERAGE_DEPTH_GROUPS):
+    """Draws the "coverage by quality flag" row onto `axes` (one ax per
+    entry of `depth_groups`, in that order): each panel covers one pair of
+    subsample depths (_COVERAGE_DEPTH_GROUPS -- roughly low/medium/high of
+    the 6 real depths), and at each depth, one violin+jittered-scatter pair
+    per real.FILTER_VALUES entry (pass/caution/mask), offset side by side
+    (_COVERAGE_VIOLIN_FILTER_OFFSET) so the three quality-flag categories
+    are directly comparable at that same target depth. Color = quality flag
+    (_COVERAGE_FILTER_COLORS) for both the violin body (semi-transparent,
+    _COVERAGE_VIOLIN_ALPHA) and its points -- unlike an earlier version of
+    this row, which colored points by CenterName and had one panel per
+    filter value instead of per depth-group.
+
+    Each point is one Run's own mean avg_depth at that subsample depth,
+    averaged across every position carrying that FILTER value
+    (per_run_filter_depth, from coverage_data.read_real_coverage_by_filter)
+    -- i.e. one summary value per (Run, filter_value, depth), not a
+    per-position value, so a violin has as many points as there are Runs
+    with data for that (filter_value, depth) combination. random.seed(42)
+    before jittering, same convention plot_main_figures.replicate_acc_diff
+    uses for its own x-jitter, so re-running reproduces the same layout.
+
+    Each panel keeps its own independent y-axis (no sharey= across panels,
+    unlike this row's first version) -- the three depth-groups can sit at
+    very different absolute depths, so a shared scale would flatten the
+    higher-depth panels' own pass/caution/mask spread; direct comparison
+    across quality-flag categories still holds *within* each panel, which
+    is where it matters (comparing pass vs. mask coverage at the same
+    target depth), not across depth-groups."""
     lfs = 8
-    center_names = sorted({meta["CenterName"] for meta in run_metadata.values()})
-    center_colors = {
-        c: cm.tab10.colors[i % len(cm.tab10.colors)] for i, c in enumerate(center_names)
-    }
+    random.seed(42)
+    n_filters = len(real.FILTER_VALUES)
+    # Symmetric offsets around each depth's own x position, e.g. n=3 ->
+    # [-offset, 0, +offset], one per FILTER_VALUES entry in order.
+    filter_offsets = [
+        (j - (n_filters - 1) / 2) * _COVERAGE_VIOLIN_FILTER_OFFSET for j in range(n_filters)
+    ]
 
-    for sample, y in reps_by_sample.items():
-        run = coverage_data.sample_to_run(sample)
-        center = run_metadata.get(run, {}).get("CenterName")
-        if center is None:
-            continue
-        ax.plot(_COVERAGE_X, y, color=center_colors[center], linewidth=_COVERAGE_REPS_LW,
-                 alpha=_COVERAGE_REPS_ALPHA, rasterized=True)
-    ax.set_xlabel("Position", fontsize=lfs)
-    ax.set_ylabel(f"avg_depth ({coverage_data.REP_SUBSAMPLE})", fontsize=lfs)
-    ax.tick_params(labelsize=lfs - 1)
+    for ax, depths in zip(axes, depth_groups):
+        depth_cols = [_subsample_to_depth_col(d) for d in depths]
+        base_x = [i * _COVERAGE_VIOLIN_GROUP_GAP for i in range(len(depths))]
 
-    handles = [Line2D([0], [0], color=center_colors[c], linewidth=1.5, label=c)
-               for c in center_names]
-    ax.legend(handles=handles, fontsize=lfs, title="CenterName", title_fontsize=lfs,
-              loc="upper left", bbox_to_anchor=(1.01, 1.0))
+        for j, filt in enumerate(real.FILTER_VALUES):
+            color = _COVERAGE_FILTER_COLORS[filt]
+            violin_data = []
+            violin_positions = []
+            for i, depth_col in enumerate(depth_cols):
+                values = [
+                    filt_dict[filt][depth_col]
+                    for filt_dict in per_run_filter_depth.values()
+                    if filt in filt_dict and depth_col in filt_dict[filt]
+                ]
+                if not values:
+                    continue
+                x0 = base_x[i] + filter_offsets[j]
+                violin_data.append(values)
+                violin_positions.append(x0)
+                xs = [x0 + random.uniform(-_COVERAGE_VIOLIN_X_JITTER, _COVERAGE_VIOLIN_X_JITTER)
+                      for _ in values]
+                ax.scatter(xs, values, color=color, s=_COVERAGE_VIOLIN_POINT_SC,
+                           alpha=_COVERAGE_VIOLIN_POINT_ALPHA, zorder=3)
 
+            if violin_data:
+                parts = ax.violinplot(
+                    violin_data, positions=violin_positions,
+                    widths=_COVERAGE_VIOLIN_WIDTH, showmeans=False, showmedians=False,
+                    showextrema=False,
+                )
+                for body in parts["bodies"]:
+                    body.set_facecolor(color)
+                    body.set_edgecolor(color)
+                    body.set_alpha(_COVERAGE_VIOLIN_ALPHA)
 
-def coverage_reps(reps_by_sample, run_metadata):
-    """
-    x = position, y = avg_depth -- one line per (Run, replicate) sample, not
-    averaged. See _draw_coverage_reps for the full visual-encoding
-    description. Single wide panel, same convention as coverage_real.
-    Output: coverage_reps.pdf
-    """
-    fig, ax = plt.subplots(figsize=(_COVERAGE_FIG_WIDTH_IN, _COVERAGE_FIG_HEIGHT_IN))
-    _draw_coverage_reps(ax, reps_by_sample, run_metadata)
+        ax.set_xticks(base_x)
+        ax.set_xticklabels([f"{d[3:]}x" for d in depths])
+        ax.set_xlabel("Subsample depth", fontsize=lfs)
+        ax.set_title(" / ".join(f"{d[3:]}x" for d in depths), fontsize=lfs + 1)
+        ax.tick_params(labelsize=lfs - 1)
 
-    filename = _out("coverage_reps.pdf")
-    plt.savefig(filename, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Written {filename}")
+    axes[0].set_ylabel("Mean avg_depth (per sample)", fontsize=lfs)
+
+    handles = [Line2D([0], [0], marker="o", color="w",
+                       markerfacecolor=_COVERAGE_FILTER_COLORS[v], markersize=lfs, label=v)
+               for v in real.FILTER_VALUES]
+    axes[-1].legend(handles=handles, fontsize=lfs, title="Quality flag", title_fontsize=lfs,
+                     loc="upper left", bbox_to_anchor=(1.01, 1.0))
 
 
 _COVERAGE_ALL_LABELS = [
     "Simulated data",
     "Real subsampled data",
-    "Replicates of real data subsampled at average of 20x",
 ]
+_COVERAGE_BY_FILTER_LABEL = "Real subsampled data, by quality-flag category"
+
+# Row-height weights passed to add_gridspec -- the filter row is taller than
+# the other two (the user asked for it explicitly, once it grew 3 side-by-
+# side violin+scatter groups per panel instead of a single one).
+_COVERAGE_ALL_ROW_HEIGHT_RATIOS = [1, 1, 1.8]
 
 
 def coverage_all(real_depth_cols, real_mean_by_depth,
                   sim_depth_cols, sim_error_rates, sim_mean_by_error_depth,
-                  reps_by_sample, run_metadata):
+                  per_run_filter_depth):
     """
-    coverage_sim/coverage_real/coverage_reps stacked into one 3-row figure,
-    reusing each one's own drawing helper (_draw_coverage_sim/
-    _draw_coverage_real/_draw_coverage_reps) for its row rather than
-    duplicating any drawing logic -- same width as the three standalone
-    figures, 3x their height (one row each), with a section label above
-    each row (_COVERAGE_ALL_LABELS) naming which data source it is.
+    Simulated / real coverage, plus a "coverage by quality flag" row,
+    stacked into one 3-row figure -- the only coverage-plot output this
+    script produces (earlier versions also wrote the first two rows as
+    their own standalone coverage_sim.pdf/coverage_real.pdf, and included a
+    third "Replicates ..." row via coverage_reps.pdf/_draw_coverage_reps;
+    both dropped -- the standalone files as redundant once this combined
+    figure covered the same content, the replicates row at the user's
+    request to keep just the simulated/real rows above the filter row
+    below). The first two rows are each drawn by their own single-ax helper
+    (_draw_coverage_sim/_draw_coverage_real) rather than duplicating any
+    drawing logic -- same per-row width as those helpers' original
+    standalone figures (_COVERAGE_FIG_WIDTH_IN), with a section label above
+    each row (_COVERAGE_ALL_LABELS) naming which data source it is, via a
+    plain ax.set_title(loc="left") since each of those rows is a single ax
+    spanning the full row width. Row heights follow
+    _COVERAGE_ALL_ROW_HEIGHT_RATIOS, not a flat 1:1:1 split -- the filter
+    row is taller, at the user's request, to give its 3x2-group violin
+    panels more room.
+
+    The third row is instead three side-by-side panels (one per
+    _COVERAGE_DEPTH_GROUPS entry), drawn by _draw_coverage_by_filter --
+    since ax.set_title(loc="left") isn't available for a row with no single
+    spanning ax, its own row label (_COVERAGE_BY_FILTER_LABEL) is placed on
+    a fourth, invisible, full-width ax stacked above the three panels (a
+    nested subgridspec, height_ratios=[label strip, panels]) rather than
+    the pixel-measured fig.text() placement sim_sa_pp_1v5's block labels /
+    _add_row_labels use elsewhere in this project -- this reserved-strip
+    approach needs no post-draw pixel measurement, at the cost of only
+    working for a short one-line label (a taller label could overflow its
+    fixed-height strip, which pixel measurement would size correctly).
     Output: coverage_all.pdf
     """
     lfs = 8
-    fig, axes = plt.subplots(3, 1, figsize=(_COVERAGE_FIG_WIDTH_IN, _COVERAGE_FIG_HEIGHT_IN * 3))
-    ax_sim, ax_real, ax_reps = axes
+    height_ratios = _COVERAGE_ALL_ROW_HEIGHT_RATIOS
+    n_rows = len(height_ratios)
+    # constrained_layout, not tight_layout() -- tight_layout() doesn't
+    # correctly size a mix of plain gridspec cells (rows 0-1) and a nested
+    # subgridspec (row 2's label-strip-over-panels split below), and was
+    # observed to collapse rows on top of each other; constrained_layout is
+    # matplotlib's layout engine built to handle nested gridspecs correctly.
+    fig = plt.figure(
+        figsize=(_COVERAGE_FIG_WIDTH_IN, _COVERAGE_FIG_HEIGHT_IN * sum(height_ratios)),
+        constrained_layout=True,
+    )
+    gs = fig.add_gridspec(n_rows, 3, height_ratios=height_ratios)
+
+    ax_sim  = fig.add_subplot(gs[0, :])
+    ax_real = fig.add_subplot(gs[1, :])
+    axes = (ax_sim, ax_real)
 
     _draw_coverage_sim(ax_sim, sim_depth_cols, sim_error_rates, sim_mean_by_error_depth)
     _draw_coverage_real(ax_real, real_depth_cols, real_mean_by_depth)
-    _draw_coverage_reps(ax_reps, reps_by_sample, run_metadata)
 
     for ax, label in zip(axes, _COVERAGE_ALL_LABELS):
         ax.set_title(label, fontsize=lfs + 2, loc="left")
 
-    fig.tight_layout()
+    gs3 = gs[2, :].subgridspec(2, 3, height_ratios=[0.08, 1], hspace=0.05)
+    ax_label = fig.add_subplot(gs3[0, :])
+    ax_label.axis("off")
+    ax_label.set_title(_COVERAGE_BY_FILTER_LABEL, fontsize=lfs + 2, loc="left")
+    ax_f1 = fig.add_subplot(gs3[1, 0])
+    ax_f2 = fig.add_subplot(gs3[1, 1])
+    ax_f3 = fig.add_subplot(gs3[1, 2])
+    _draw_coverage_by_filter((ax_f1, ax_f2, ax_f3), per_run_filter_depth)
+
     filename = _out("coverage_all.pdf")
     plt.savefig(filename, bbox_inches="tight")
     plt.close(fig)
@@ -701,13 +789,18 @@ if __name__ == "__main__":
     rebuild_coverage = "--rebuild-coverage" in sys.argv
     coverage_ready = os.path.exists(COVERAGE_CACHE_PATH) or all(
         os.path.exists(p) for p in (coverage_data.REAL_COVERAGE_PATH,
-                                     coverage_data.SIM_COVERAGE_PATH,
-                                     coverage_data.REPS_COVERAGE_PATH)
+                                     coverage_data.SIM_COVERAGE_PATH)
     )
     if not coverage_ready:
         print("Skipping coverage plots -- coverage_only/'s aggregated tables not found "
               "(run coverage_only/aggregate_coverage.sh first).")
     else:
+        # The flat depth list read_real_coverage_by_filter needs -- every
+        # depth _COVERAGE_DEPTH_GROUPS' panels use, derived from that
+        # grouping (not a separate list) so it can't drift out of sync with
+        # what _draw_coverage_by_filter actually plots.
+        filter_depths = [d for group in _COVERAGE_DEPTH_GROUPS for d in group]
+
         if not rebuild_coverage and os.path.exists(COVERAGE_CACHE_PATH):
             print(f"Loading coverage cache from {COVERAGE_CACHE_PATH} "
                   f"(use --rebuild-coverage to force re-read) ...")
@@ -718,14 +811,19 @@ if __name__ == "__main__":
             sim_cov_depth_cols      = _cov_cache["sim_depth_cols"]
             sim_error_rates         = _cov_cache["sim_error_rates"]
             sim_mean_by_error_depth = _cov_cache["sim_mean_by_error_depth"]
-            reps_by_sample          = _cov_cache["reps_by_sample"]
+            per_run_filter_depth    = _cov_cache["per_run_filter_depth"]
         else:
             if rebuild_coverage:
                 print("--rebuild-coverage: re-reading coverage tables ...")
             real_depth_cols, real_mean_by_depth = coverage_data.read_real_coverage()
             sim_cov_depth_cols, sim_error_rates, sim_mean_by_error_depth = \
                 coverage_data.read_sim_coverage()
-            reps_by_sample = coverage_data.read_reps_coverage()
+
+            pos_filter = real.load_filter_metadata(real.FILTER_METADATA_PATH)
+            filter_depth_cols = [_subsample_to_depth_col(d) for d in filter_depths]
+            per_run_filter_depth = coverage_data.read_real_coverage_by_filter(
+                pos_filter, filter_depth_cols
+            )
 
             print(f"Saving coverage cache to {COVERAGE_CACHE_PATH} ...")
             with open(COVERAGE_CACHE_PATH, "wb") as _f:
@@ -735,13 +833,9 @@ if __name__ == "__main__":
                     "sim_depth_cols":          sim_cov_depth_cols,
                     "sim_error_rates":         sim_error_rates,
                     "sim_mean_by_error_depth": sim_mean_by_error_depth,
-                    "reps_by_sample":          reps_by_sample,
+                    "per_run_filter_depth":    per_run_filter_depth,
                 }, _f)
 
-        run_metadata = real.load_sample_metadata(real.SAMPLE_METADATA_PATH)
-        coverage_real(real_depth_cols, real_mean_by_depth)
-        coverage_sim(sim_cov_depth_cols, sim_error_rates, sim_mean_by_error_depth)
-        coverage_reps(reps_by_sample, run_metadata)
         coverage_all(real_depth_cols, real_mean_by_depth,
                      sim_cov_depth_cols, sim_error_rates, sim_mean_by_error_depth,
-                     reps_by_sample, run_metadata)
+                     per_run_filter_depth)
